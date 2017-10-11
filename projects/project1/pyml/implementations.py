@@ -1,3 +1,6 @@
+import numpy as np
+
+
 def least_squares_GD(y, tx, initial_w=None, max_iters=100, gamma=0.1):
     if initial_w is not None:
         w = initial_w
@@ -9,7 +12,7 @@ def least_squares_GD(y, tx, initial_w=None, max_iters=100, gamma=0.1):
         grad = _compute_gradient(y, tx, w)
         w = w-gamma*grad
 
-    print("Gradient Descent {} iter: loss={}".format(max_iters, loss)
+    print("Gradient Descent {} iter: loss={}".format(max_iters, loss))
     return loss, w
 
 def least_squares_SGD(y, tx, initial_w=None, max_iters=100, gamma=0.5):
@@ -25,7 +28,7 @@ def least_squares_SGD(y, tx, initial_w=None, max_iters=100, gamma=0.5):
         grad = _compute_gradient(y_st, tx_st, w)
         w = w-gamma*grad
 
-    print("SGD (batch, iter) = ({}, {}): loss={}".format(batch_size, n_iter, loss)
+    print("SGD (batch, iter) = ({}, {}): loss={}".format(batch_size, n_iter, loss))
     return loss, w
 
 def least_squares(y, tx):
