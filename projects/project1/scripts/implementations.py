@@ -54,6 +54,13 @@ def _compute_gradient(y, tx, w):
 def _compute_stoch_gradient(y, tx, w):
     return compute_gradient(y, tx, w)
 
+def build_poly(x, degree):
+    """polynomial basis functions for input data x, for j=0 up to j=degree."""
+    _x = np.ones((np.shape(x)[0], degree+1))
+    for i in range(1, degree+1):
+        _x[:, i] = x**i
+    return _x
+
 def _batch_iter(y, tx, batch_size, num_batches=1, shuffle=True):
     """
     Generate a minibatch iterator for a dataset.
