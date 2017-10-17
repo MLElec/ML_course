@@ -9,7 +9,7 @@ def load_csv_data(data_path, sub_sample=False):
     y = np.genfromtxt(data_path, delimiter=",", skip_header=1, dtype=str, usecols=1)
     x = np.genfromtxt(data_path, delimiter=",", skip_header=1)
     with open(data_path, 'r') as f:
-        header = f.readline().replace('\n', '').split(',')[2:]
+        header = np.array(f.readline().replace('\n', '').split(',')[2:])
     ids = x[:, 0].astype(np.int)
     input_data = x[:, 2:]
 
