@@ -8,7 +8,7 @@ def compute_loss(y, ty):
 
 def mse(y, ty):
     e = y - ty
-    loss = e.dot(e) / (2 * len(e))
+    loss = e.dot(e.T) / (2 * len(e))
     return loss
 
 ## *********** Grid Search ***********
