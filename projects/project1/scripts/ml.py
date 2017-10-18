@@ -31,16 +31,35 @@ def cross_validation_ls(y, x, k_fold = 4, degree = 1, seed = 0):
     # split data in k fold
     k_indices = _build_k_indices(y, k_fold, seed)
     # define lists to store the loss of training data and test data
-    acc = np.empty(k_fold)
+    acc_tr = np.empty(k_fold)
+    acc_te = np.empty(k_fold)
     rmse_tr = np.empty(k_fold)
     rmse_te = np.empty(k_fold)
 
     # Performs k-fold validation
     for k in range(k_fold):
-        acc[k], rmse_tr[k], rmse_te[k] = _cross_validation_step_ls(y, x, k_indices, k, degree)
+        acc_tr[k], acc_te[k], rmse_tr[k], rmse_te[k] = _cross_validation_step_ls(y, x, k_indices, k, degree)
         rmse_tr[k], rmse_te[k] = np.sqrt(rmse_tr[k]), np.sqrt(rmse_te[k])
     # Take mean value
-    return np.mean(acc), np.mean(rmse_tr), np.mean(rmse_te)
+    return np.mean(acc_te), np.mean(rmse_tr), np.mean(rmse_te)
+
+
+def _cross_validation_step_ls(y, x, k_indices, k, degree):
+    """return the loss of ridge regression."""
+    
+    # Get indices for train and test sets
+    _ind_train = np.delete(k_indices, k, axis=0).flatten()
+    _ind_test = k_indices[k]
+    
+    # Build polynomial matrix
+    _phi_train = build_poly(x[_ind_train], degree)
+    _phi_test = build_poly(x[_ind_test], degree)
+                            
+    loss_tr, weights = least_squares(y[_ind_train], _phi_train)
+    loss_te = compute_loss(y[_ind_test], _phi_test.dot(weights))
+    acc_tr = accuracy(y[_ind_test], _phi_test.dot(weights))
+    acc_te = accuracy(y[_ind_train], _phi_train.dot(weights))
+    return acc_tr, acc_te, loss_tr, loss_te
 
 
 def cross_validation_ridge(y, x, k_fold = 4, degree = 1, seed = 0):
@@ -59,23 +78,6 @@ def cross_validation_ridge(y, x, k_fold = 4, degree = 1, seed = 0):
         print(lambda_, acc[k])
     # Take mean value
     return np.mean(acc), np.mean(rmse_tr), np.mean(rmse_te)
-
-
-def _cross_validation_step_ls(y, x, k_indices, k, degree):
-    """return the loss of ridge regression."""
-    
-    # Get indices for train and test sets
-    _ind_train = np.delete(k_indices, k, axis=0).flatten()
-    _ind_test = k_indices[k]
-    
-    # Build polynomial matrix
-    _phi_train = build_poly(x[_ind_train], degree)
-    _phi_test = build_poly(x[_ind_test], degree)
-                            
-    loss_tr, weights = least_squares(y[_ind_train], _phi_train)
-    loss_te = compute_loss(y[_ind_test], _phi_test.dot(weights))
-    acc = accuracy(y[_ind_test], _phi_test.dot(weights))
-    return acc, loss_tr, loss_te
 
 
 def _cross_validation_step_ridge(y, x, k_indices, k, lambda_, degree):
