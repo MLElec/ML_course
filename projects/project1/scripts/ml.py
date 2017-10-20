@@ -6,11 +6,11 @@ def augmented_feat_angle(x, id_col):
     feat_sin = np.sin(feat_angle)
     feat_cos = np.cos(feat_angle)
     
-    aug = np.concatenate((x, feat_sin), axis=1)
-    aug = np.concatenate((aug, feat_cos), axis=1)
+    return np.concatenate((feat_cos, feat_sin), axis=1)
+    #aug = np.concatenate((aug, feat_cos), axis=1)
     
-    aug = aug[:, [id_ not in id_col for id_ in range(aug.shape[1])] ]
-    return aug
+    #aug = aug[:, [id_ not in id_col for id_ in range(aug.shape[1])] ]
+    #return aug
 
 def _best_lambda(y, x, degree=7, k_fold = 4, seed = 1):
     lambdas = np.logspace(-4, 0, 5)

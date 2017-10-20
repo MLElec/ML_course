@@ -113,29 +113,15 @@ def _batch_iter(y, tx, batch_size, num_batches=1, shuffle=True):
         end_index = min((batch_num + 1) * batch_size, data_size)
         if start_index != end_index:
             yield shuffled_y[start_index:end_index], shuffled_tx[start_index:end_index]
-			
-def sep_valid_train_data(x,y,ratio):
+
+
+def sep_valid_train_data(x, y, ratio, seed=0):
     """Separates data x, y into training(size: 1-ratio) and validation(size: ratio) set """
-    data_len =  np.shape(y)[0];
-    nr_validation_idx = np.floor(ratio*data_len);
-
-    # non repetitive random values
-    idx_to_validation_set = set()
-    #fill in the validation idx
-    while len(idx_to_validation_set) < nr_validation_idx:
-        idx_to_validation_set.add(np.random.randint(0, data_len))
-
-    # train indices = ALL - validation_set
-    idx_to_train_set = set(range(0,data_len)).difference(idx_to_validation_set)
-
-    # convert it to array so that it can be index
-    idx_to_train_set = np.array(list(idx_to_train_set))
-    idx_to_validation_set = np.array(list(idx_to_validation_set))
-
-    y_train = y[idx_to_train_set];
-    y_validation = y[idx_to_validation_set];
     
-    x_train = x[idx_to_train_set];
-    x_validation = x[idx_to_validation_set];
+    np.random.seed(seed)
+    ids = np.random.permutation(y.shape[0])
     
-    return y_train, x_train,  y_validation, x_validation
+    id_train = ids[:int(y.shape[0]*ratio)]
+    id_validation = ids[int(y.shape[0]*ratio):]
+    
+    return y[id_train], x[id_train], y[id_validation], x[id_validation]
