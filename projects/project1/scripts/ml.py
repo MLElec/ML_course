@@ -1,15 +1,27 @@
 import numpy as np
 from scripts.implementations import build_poly, compute_loss, least_squares, accuracy, ridge_regression
 
-def augmented_feat_angle(x, id_col):
+def augmented_feat_angle(x, id_col, labels):
     feat_angle = x[:, id_col]
     feat_sin = np.sin(feat_angle)
     feat_cos = np.cos(feat_angle)
-    return feat_cos, feat_sin
-    #aug = np.concatenate((aug, feat_cos), axis=1)
+    x_angle = np.concatenate((feat_cos, feat_sin), axis=1)
     
-    #aug = aug[:, [id_ not in id_col for id_ in range(aug.shape[1])] ]
-    #return aug
+    label_cos_new = [ label + '_cos' for label in labels[id_col]]
+    label_sin_new = [ label + '_sin' for label in labels[id_col]]
+    label_cos_new.extend(label_sin_new)
+    return np.concatenate((x, x_angle), axis=1), np.concatenate((labels, label_cos_new))
+
+
+def add_nan_feature(tx, feature_number, labels):
+    
+    label_nan = []
+    for i, feature in enumerate(feature_number):  
+        feat_nan = np.expand_dims(2*np.isnan(tx.T[feature,:])-1,axis=1)
+        tx = np.concatenate((tx, feat_nan),axis=1)
+        label_nan.append('NAN-'+str(i))
+    return tx,  np.concatenate((labels, label_nan))
+   
 
 def _best_lambda(y, x, degree=7, k_fold = 4, seed = 1):
     lambdas = np.logspace(-4, 0, 5)
