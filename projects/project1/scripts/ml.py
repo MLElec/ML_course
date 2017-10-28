@@ -21,7 +21,116 @@ def add_nan_feature(tx, feature_number, labels):
         tx = np.concatenate((tx, feat_nan),axis=1)
         label_nan.append('NAN-'+str(i))
     return tx,  np.concatenate((labels, label_nan))
+
+def add_feature(x_in, id_feat1, id_feat2):
+    if id_feat1 != id_feat2:
+        new_feat = np.expand_dims(x_in[:, id_feat1]*x_in[:, id_feat2], axis=1)
+    else:
+        new_feat = np.expand_dims(x_in[:, id_feat1], axis=1)
+    return np.concatenate((x_in, new_feat), axis=1)
+
+def add_features(x_in, id_feats):
+    for id_feat in id_feats:
+        x_in = add_feature(x_in, id_feat[0], id_feat[1])
+    return x_in
+
+def remove_useless(x_in, id_useless):
+    id_left = [ i for i in range(x_in.shape[1]) if i not in id_useless]
+    return x_in[:, id_left]
    
+def norm_poisson(feature, perc_threshold=0.01):
+    length = feature.shape[0];
+    idx_val = np.int(np.ceil(length*perc_threshold))
+    maxval = np.sort(feature)[-idx_val]
+    
+    #idx_outliers = np.argsort(feature)[-idx_val:]
+    #maxval = feature[np.argsort(feature)[ -(idx_val+1) ]]
+    
+    mean = np.nanmean(feature[feature < maxval])
+    std = np.nanstd(feature[feature < maxval])
+    feature[feature > maxval] = maxval
+    feature -= mean
+    feature /= std
+    return feature, mean, std, maxval
+
+def norm_poisson_feed(feature, mean_ref, std_ref, maxval):    
+    feature[feature > maxval] = maxval
+    feature -= mean_ref
+    feature /= std_ref
+    return feature
+
+def norm_gaussian(feature, n_std=2.5):
+    
+    feat_cent = feature-np.nanmean(feature)
+    std_thresh = np.nanstd(feat_cent, axis=0)
+    maxval = n_std*std_thresh
+    
+    mean_update = np.nanmean(feature[np.abs(feat_cent) < maxval])
+    std_update = np.nanstd(feature[np.abs(feat_cent) < maxval])
+    feat_final = feature-mean_update
+    feat_final[feat_final > maxval] = maxval
+    feat_final[feat_final < -maxval] = -maxval
+    feat_final /= std_update
+    
+    #feature[feature > maxval] = maxval
+    #feature[feature < -maxval] = -maxval
+    
+    #mean_update = np.nanmean(feature)
+    #std_update = np.nanstd(feature)
+    #feature = (feature-mean_update)/std_update
+        
+    #return feature, mean_update, std_update, maxval
+
+    return feat_final, mean_update, std_update, maxval
+
+def norm_gaussian_feed(feature, mean_ref, std_ref, maxval):    
+    feat_final = feature - mean_ref
+    feat_final[feat_final > maxval]  = maxval
+    feat_final[feat_final < -maxval] = -maxval
+    feat_final /= std_ref
+    return feat_final
+    
+def normalize_outliers(x_in, dist_type):
+    # 1. Substract mean
+    # 2. Compute std and detect ouliers
+    # 3. Compute std and mean witout ouliers
+    mean_corr = []
+    std_corr = []
+    max_val_corr = []
+                
+    for i, feat in enumerate(x_in.T):
+        # Normalize according to distribution
+        if dist_type[i] == 'g' or dist_type[i] == 'i' or dist_type[i] == 'u' \
+                or dist_type[i] == 'f' or dist_type[i] == 'd':
+            feat_new, mean_new, std_new, max_val_new = norm_gaussian(feat)
+        elif dist_type[i] == 'p':
+            feat_new, mean_new, std_new, max_val_new = norm_poisson(feat)
+        else:
+            feat_new, mean_new, std_new, max_val_new = (feat, 0, 1, np.inf)
+        # Affect new values
+        mean_corr.append(mean_new)
+        std_corr.append(std_new)
+        max_val_corr.append(max_val_new)
+        x_in[:, i] = feat_new
+    return x_in, mean_corr, std_corr, max_val_corr
+
+def normalize_outliers_feed(x_in, mean_ref, std_ref, max_ref, dist_type):
+    # 1. Substract mean
+    # 2. Compute std and detect ouliers
+    # 3. Compute std and mean witout ouliers
+    
+    for i, feat in enumerate(x_in.T):
+        # Normalize according to distribution
+        if dist_type[i] == 'g' or dist_type[i] == 'i' or dist_type[i] == 'u' \
+                or dist_type[i] == 'f' or dist_type[i] == 'd':
+            feat_new = norm_gaussian_feed(feat, mean_ref[i], std_ref[i], max_ref[i])
+        elif dist_type[i] == 'p':
+            feat_new = norm_poisson_feed(feat, mean_ref[i], std_ref[i], max_ref[i])
+        else:
+            feat_new = feat
+        # Affect new value
+        x_in[:, i] = feat_new
+    return x_in
 
 def _best_lambda(y, x, degree=7, k_fold = 4, seed = 1):
     lambdas = np.logspace(-4, 0, 5)

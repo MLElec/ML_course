@@ -1,5 +1,5 @@
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 def least_squares_GD(y, tx, initial_w=None, max_iters=100, gamma=0.1, loss_name='mse'):
     if initial_w is not None:
@@ -10,7 +10,7 @@ def least_squares_GD(y, tx, initial_w=None, max_iters=100, gamma=0.1, loss_name=
     for n_iter in range(max_iters):
         loss = compute_loss(y, tx.dot(w), loss_name)
         grad = _compute_gradient(y, tx, w, loss_name)
-        w = w-gamma*grad
+        w = w-gamma*grad/(n_iter+1)
 
     print("Gradient Descent {} iter: loss={}".format(max_iters, loss))
     return loss, w
@@ -26,7 +26,7 @@ def least_squares_SGD(y, tx, initial_w=None, max_iters=100, gamma=0.5, loss_name
         (y_st, tx_st) = [batch for batch in _batch_iter(y, tx, batch_size)][0]
         loss = compute_loss(y, tx.dot(w), loss_name)
         grad = _compute_gradient(y_st, tx_st, w, loss_name)
-        w = w-gamma*grad
+        w = w-gamma*grad/(n_iter+1)
 
     print("SGD (batch, iter) = ({}, {}): loss={}".format(batch_size, n_iter, loss))
     return loss, w
@@ -41,6 +41,133 @@ def ridge_regression(y, tx, lambda_):
     w = np.linalg.inv(tx.T.dot(tx) + Lambda_.dot(Lambda_)).dot(tx.T).dot(y)
     loss = compute_loss(y, tx.dot(w))
     return loss, w
+
+def plot_train_test(train_errors, test_errors, lambdas, degree):
+    """
+    train_errors, test_errors and lambas should be list (of the same size) the respective train error and test error for a given lambda,
+    * lambda[0] = 1
+    * train_errors[0] = RMSE of a ridge regression on the train set
+    * test_errors[0] = RMSE of the parameter found by ridge regression applied on the test set
+    
+    degree is just used for the title of the plot.
+    """
+    plt.semilogx(lambdas, train_errors, color='b', marker='*', label="Train error")
+    plt.semilogx(lambdas, test_errors, color='r', marker='*', label="Test error")
+    plt.xlabel("lambda")
+    plt.ylabel("RMSE")
+    plt.title("Ridge regression for polynomial degree " + str(degree))
+    leg = plt.legend(loc=1, shadow=True)
+    leg.draw_frame(False)
+    plt.savefig("ridge_regression")
+
+def test_least_squares(x, y, x_val, y_val, degrees, mode='normal'):
+    
+    best_acc = 0
+    best_degree = 0
+    #best_rmse_tr = []
+    #best_rmse_te = []
+    best_weights = []
+    rmse_tr = []
+    rmse_te = []
+    for ind,degree in enumerate(degrees):
+        degree = int(degree)
+
+        # Get ploynomial
+        phi_train = build_poly(x, degree)
+        phi_test = build_poly(x_val, degree)
+
+
+        #update_rmse = False
+
+        if mode=='normal':
+            mse_tr, weights = least_squares(y, phi_train)
+        elif mode =='GD':
+            mse_tr, weights = least_squares_GD(y, phi_train, initial_w=None, max_iters=200, gamma=0.01, loss_name='mse')
+        elif mode =='SGD':
+            mse_tr, weights = least_squares_SGD(y, phi_train, initial_w=None, max_iters=200, gamma=0.01, loss_name='mse')
+
+
+        mse_te = compute_loss(y_val, phi_test.dot(weights))
+        rmse_tr.append(np.sqrt(2*mse_tr))
+        rmse_te.append(np.sqrt(2*mse_te))
+
+        print("degree={d}, Training RMSE={tr:.3f}, Testing RMSE={te:.3f}".format(
+                d=degree, tr=rmse_tr[ind], te=rmse_te[ind]))
+        print('train acc : ', accuracy(y, phi_train.dot(weights)))
+        val_acc = accuracy(y_val, phi_test.dot(weights))
+        print('validation acc : ', val_acc)
+        
+        if(val_acc > best_acc):
+            best_acc = val_acc
+            best_degree = degree
+            best_weights = weights
+            #update_rmse = True
+        
+    # if(update_rmse):
+    #    best_rmse_tr = rmse_tr
+    #    best_rmse_te = rmse_te
+
+        # Plot the best obtained results
+    #plot_train_test(best_rmse_tr, best_rmse_te, lambdas, best_degree)
+
+    print('Best params for Least Squares : degree = ',best_degree, ', accuracy = ', best_acc)
+    
+    return best_weights, best_degree
+    
+def test_ridge_regression(x, y, x_val, y_val, degrees, lambdas):
+    
+    best_acc = 0
+    best_degree = 0
+    best_lambda = 0
+    best_rmse_tr = []
+    best_rmse_te = []
+    best_weights = []
+    for degree in degrees:
+        degree = int(degree)
+        #lambdas = np.logspace(-7, 2, 20)
+
+        # Split sets
+        #x_train, x_test, y_train, y_test = split_data(x, y, ratio, seed)
+
+        # Get ploynomial
+        phi_train = build_poly(x, degree)
+        phi_test = build_poly(x_val, degree)
+
+        rmse_tr = []
+        rmse_te = []
+        update_rmse = False
+
+        for ind, lambda_ in enumerate(lambdas):
+
+            mse_tr, weights = ridge_regression(y, phi_train, lambda_)
+            mse_te = compute_loss(y_val, phi_test.dot(weights))
+            rmse_tr.append(np.sqrt(2*mse_tr))
+            rmse_te.append(np.sqrt(2*mse_te))
+
+            print("degree={d}, lambda={l:.3f}, Training RMSE={tr:.3f}, Testing RMSE={te:.3f}".format(
+                    d=degree, l=lambda_, tr=rmse_tr[ind], te=rmse_te[ind]))
+            print('train acc : ', accuracy(y, phi_train.dot(weights)))
+            val_acc = accuracy(y_val, phi_test.dot(weights))
+            print('validation acc : ', val_acc)
+
+            if(val_acc > best_acc):
+                best_acc = val_acc
+                best_degree = degree
+                best_lambda = lambda_
+                best_weights = weights
+                update_rmse = True
+        
+        if(update_rmse):
+            best_rmse_tr = rmse_tr
+            best_rmse_te = rmse_te
+
+        # Plot the best obtained results
+    plot_train_test(best_rmse_tr, best_rmse_te, lambdas, best_degree)
+
+    print('Best params for Ridge regression : degree = ',best_degree, ', lambda = ',best_lambda,', accuracy = ', best_acc)
+    
+    return best_weights, best_degree, best_lambda
+
 
 def build_poly(x, degree):
     """ polynomial basis functions for input data x, for j=0 up to j=degree. If x as multiple columns (feaures) 
