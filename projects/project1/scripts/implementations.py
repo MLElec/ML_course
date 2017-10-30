@@ -1,5 +1,5 @@
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 def least_squares_GD(y, tx, initial_w=None, max_iters=100, gamma=0.1, loss_name='mse'):
     if initial_w is not None:
@@ -10,7 +10,7 @@ def least_squares_GD(y, tx, initial_w=None, max_iters=100, gamma=0.1, loss_name=
     for n_iter in range(max_iters):
         loss = compute_loss(y, tx.dot(w), loss_name)
         grad = _compute_gradient(y, tx, w, loss_name)
-        w = w-gamma*grad
+        w = w-gamma*grad/(n_iter+1)
 
     print("Gradient Descent {} iter: loss={}".format(max_iters, loss))
     return loss, w
@@ -26,7 +26,7 @@ def least_squares_SGD(y, tx, initial_w=None, max_iters=100, gamma=0.5, loss_name
         (y_st, tx_st) = [batch for batch in _batch_iter(y, tx, batch_size)][0]
         loss = compute_loss(y, tx.dot(w), loss_name)
         grad = _compute_gradient(y_st, tx_st, w, loss_name)
-        w = w-gamma*grad
+        w = w-gamma*grad/(n_iter+1)
 
     print("SGD (batch, iter) = ({}, {}): loss={}".format(batch_size, n_iter, loss))
     return loss, w
@@ -41,6 +41,324 @@ def ridge_regression(y, tx, lambda_):
     w = np.linalg.inv(tx.T.dot(tx) + Lambda_.dot(Lambda_)).dot(tx.T).dot(y)
     loss = compute_loss(y, tx.dot(w))
     return loss, w
+
+def sigmoid(xt):
+    """Sigmoid"""
+    return 1.0 / (1 + np.exp(-xt))
+
+def learning_by_gradient_descent(y, tx, w, gamma):
+    """
+     1 step of GD
+    """
+    loss = compute_loss(np.squeeze(y), tx.dot(w), loss_name='neg_log_likelihood' )
+    gradient = _compute_gradient(np.squeeze(y), np.squeeze(tx), w , loss_name='neg_log_likelihood')
+    w = w -  gamma * gradient
+    return loss, w
+
+def penalized_logistic_regression(y, tx, w, lambda_):
+    loss = compute_loss(np.squeeze(y), np.squeeze(tx.dot(w)), loss_name='neg_log_likelihood' ) + lambda_ * np.squeeze(w.T.dot(w))
+    gradient = _compute_gradient(np.squeeze(y), tx, w, loss_name='neg_log_likelihood') + 2 * lambda_ * w
+    return loss, gradient
+
+def learning_by_penalized_gradient(y, tx, w, gamma, lambda_):
+    loss, gradient = penalized_logistic_regression(y, tx, w, lambda_)
+    w -= gamma * gradient
+    return loss, w
+
+def logistic_regression_GD(y, x, max_iter, threshold, gamma):
+    # init parameters
+    losses = []
+
+    tx = x
+    w = np.zeros((tx.shape[1], 1))
+    print("Start the logistic regression")
+    # start the logistic regression
+    for iter in range(max_iter):
+        # get loss and update w.
+        loss, w = learning_by_gradient_descent(y, tx, w, gamma)
+        if( np.isnan(loss)):
+            break;
+        # log info
+        if iter % 100 == 0:
+            print("Current iteration={i}, loss={l}".format(i=iter, l=loss))
+        # converge criterion
+        losses.append(loss)
+        if len(losses) > 1 and np.abs(losses[-1] - losses[-2]) < threshold:
+            break;
+    print("STOP it={i}, loss={l} ".format(i=iter,l=loss))
+    return w;
+
+def logistic_regression_penalized_GD(y, x, max_iter, threshold, gamma, lambda_):
+    # init parameters
+    losses = []
+
+    #    tx = np.c_[np.ones((y.shape[0], 1)), x]
+    tx = x
+    w = np.zeros((tx.shape[1], 1))
+    print("Start the logistic regression")
+    # start the logistic regression
+    for iter in range(max_iter):
+        loss, w = learning_by_penalized_gradient(y, tx, w, gamma, lambda_)
+        #break;
+        if( np.isnan(loss)):
+            break;
+        # log info
+        if iter % 100 == 0:
+            print("Current iteration={i}, loss={l}".format(i=iter, l=loss))
+        # converge criterion
+        losses.append(loss)
+        #print(loss)
+        if len(losses) > 1 and np.abs(losses[-1] - losses[-2]) < threshold:
+            break;
+    print("STOP it={i}, loss={l} ".format(i=iter,l=loss))
+    return w;
+
+def test_logistic_GD(x, y, x_val, y_val, degrees, gamma):
+    
+    best_acc = 0
+    best_degree = 0
+    best_weights = []
+    rmse_tr = []
+    rmse_te = []
+    for ind,degree in enumerate(degrees):
+        degree = int(degree)
+
+        # Get ploynomial
+        phi_train = build_poly(x, degree)
+        phi_test = build_poly(x_val, degree)
+
+        weights = logistic_regression_GD(y, phi_train, max_iter=5000, gamma=gamma, threshold=1e-8)
+
+        mse_te = compute_loss(y_val, phi_test.dot(weights))
+        rmse_tr.append(np.sqrt(2*mse_tr))
+        rmse_te.append(np.sqrt(2*mse_te))
+
+        print("degree={d}, Training RMSE={tr:.3f}, Testing RMSE={te:.3f}".format(
+                d=degree, tr=rmse_tr[ind], te=rmse_te[ind]))
+        print('train acc : ', accuracy(y, phi_train.dot(weights)))
+        val_acc = accuracy(y_val, phi_test.dot(weights))
+        print('validation acc : ', val_acc)
+        
+        if(val_acc > best_acc):
+            best_acc = val_acc
+            best_degree = degree
+            best_weights = weights
+
+    print('Best params for Least Squares : degree = ',best_degree, ', accuracy = ', best_acc)
+    
+    return best_weights, best_degree
+
+def calculate_hessian(y, tx, w):
+    """return the hessian of the loss function. - smart multiplication"""
+    pred = sigmoid(tx.dot(w))
+    pred = (pred - pred*pred) 
+    tx2 =tx.T.copy();
+    for i in range(0, len(pred)):
+        tx2[:,i] =  pred[i] * tx2[:,i];
+    return tx2.dot(tx)
+
+def logistic_regression_Newton_step(y, tx, w):
+    """Netwon method for logistic regression"""
+    y = np.expand_dims(y, axis=0)
+    loss = compute_loss(y, np.squeeze(tx.dot(w)) )
+    gradient = _compute_gradient(y, tx, np.squeeze(w), loss_name='neg_log_likelihood')
+    hessian = calculate_hessian(y, tx, w)
+    return loss, gradient, hessian
+
+def learning_by_newton_method(y, tx, w,gamma):
+    """
+    ONe step on Newton's method.
+    """
+    loss, gradient, hessian = logistic_regression_Newton_step(y, tx, w)
+    result =gamma*np.linalg.solve(np.squeeze(hessian), np.squeeze(gradient.T))
+    result = np.expand_dims(result, axis=1)
+    w = w- result
+    return loss, w
+
+def logistic_regression_Newton(y, x, max_iter, threshold, gamma):
+    # init parameters
+    losses = []
+
+    #    tx = np.c_[np.ones((y.shape[0], 1)), x]
+    tx = x
+    w = np.zeros((tx.shape[1], 1))
+    # start the logistic regression
+    for iter in range(max_iter):
+        loss, w = learning_by_newton_method(y, tx, w, gamma)
+        #break;
+        if( np.isnan(loss)):
+            break;
+        # log info
+        #if iter % 1 == 0:
+            #print("Current iteration={i}, loss={l}".format(i=iter, l=np.squeeze(loss)))
+        # converge criterion
+        losses.append(loss)
+        #print(loss)
+        if len(losses) > 1 and losses[-2] - losses[-1] < threshold:
+            break;
+    print("STOP it={i}, loss={l} ".format(i=iter,l=loss))
+    return w;
+
+def test_logistic_Newton(x, y, x_val, y_val, degrees, gamma):
+    
+    best_acc = 0
+    best_degree = 0
+    best_weights = []
+    rmse_tr = []
+    rmse_te = []
+    for ind,degree in enumerate(degrees):
+        degree = int(degree)
+
+        # Get ploynomial
+        phi_train = build_poly(x, degree)
+        phi_test = build_poly(x_val, degree)
+
+        weights = logistic_regression_Newton(y, phi_train, max_iter=200, gamma=gamma, threshold=1e-8)
+
+        mse_te = compute_loss(y_val, np.squeeze(phi_test.dot(weights)))
+        rmse_te.append(np.sqrt(2*mse_te))
+
+        print("degree={d}, Testing RMSE={te:.3f}".format(
+                d=degree,  te=rmse_te[ind]))
+        print('train acc : ', accuracy(y, np.squeeze(phi_test.dot(weights))))
+        val_acc = accuracy(y_val, np.squeeze(phi_test.dot(weights)))
+        print('validation acc : ', val_acc)
+        
+        if(val_acc > best_acc):
+            best_acc = val_acc
+            best_degree = degree
+            best_weights = weights
+
+    print('Best params for Least Squares : degree = ',best_degree, ', accuracy = ', best_acc)
+    
+    return best_weights, best_degree
+
+def plot_train_test(train_errors, test_errors, lambdas, degree):
+    """
+    train_errors, test_errors and lambas should be list (of the same size) the respective train error and test error for a given lambda,
+    * lambda[0] = 1
+    * train_errors[0] = RMSE of a ridge regression on the train set
+    * test_errors[0] = RMSE of the parameter found by ridge regression applied on the test set
+    
+    degree is just used for the title of the plot.
+    """
+    plt.semilogx(lambdas, train_errors, color='b', marker='*', label="Train error")
+    plt.semilogx(lambdas, test_errors, color='r', marker='*', label="Test error")
+    plt.xlabel("lambda")
+    plt.ylabel("RMSE")
+    plt.title("Ridge regression for polynomial degree " + str(degree))
+    leg = plt.legend(loc=1, shadow=True)
+    leg.draw_frame(False)
+    plt.savefig("ridge_regression")
+
+def test_least_squares(x, y, x_val, y_val, degrees, mode='normal'):
+    
+    best_acc = 0
+    best_degree = 0
+    #best_rmse_tr = []
+    #best_rmse_te = []
+    best_weights = []
+    rmse_tr = []
+    rmse_te = []
+    for ind,degree in enumerate(degrees):
+        degree = int(degree)
+
+        # Get ploynomial
+        phi_train = build_poly(x, degree)
+        phi_test = build_poly(x_val, degree)
+
+
+        #update_rmse = False
+
+        if mode=='normal':
+            mse_tr, weights = least_squares(y, phi_train)
+        elif mode =='GD':
+            mse_tr, weights = least_squares_GD(y, phi_train, initial_w=None, max_iters=200, gamma=0.01, loss_name='mse')
+        elif mode =='SGD':
+            mse_tr, weights = least_squares_SGD(y, phi_train, initial_w=None, max_iters=200, gamma=0.01, loss_name='mse')
+
+
+        mse_te = compute_loss(y_val, phi_test.dot(weights))
+        rmse_tr.append(np.sqrt(2*mse_tr))
+        rmse_te.append(np.sqrt(2*mse_te))
+
+        print("degree={d}, Training RMSE={tr:.3f}, Testing RMSE={te:.3f}".format(
+                d=degree, tr=rmse_tr[ind], te=rmse_te[ind]))
+        print('train acc : ', accuracy(y, phi_train.dot(weights)))
+        val_acc = accuracy(y_val, phi_test.dot(weights))
+        print('validation acc : ', val_acc)
+        
+        if(val_acc > best_acc):
+            best_acc = val_acc
+            best_degree = degree
+            best_weights = weights
+            #update_rmse = True
+        
+    # if(update_rmse):
+    #    best_rmse_tr = rmse_tr
+    #    best_rmse_te = rmse_te
+
+        # Plot the best obtained results
+    #plot_train_test(best_rmse_tr, best_rmse_te, lambdas, best_degree)
+
+    print('Best params for Least Squares : degree = ',best_degree, ', accuracy = ', best_acc)
+    
+    return best_weights, best_degree
+    
+def test_ridge_regression(x, y, x_val, y_val, degrees, lambdas):
+    
+    best_acc = 0
+    best_degree = 0
+    best_lambda = 0
+    best_rmse_tr = []
+    best_rmse_te = []
+    best_weights = []
+    for degree in degrees:
+        degree = int(degree)
+        #lambdas = np.logspace(-7, 2, 20)
+
+        # Split sets
+        #x_train, x_test, y_train, y_test = split_data(x, y, ratio, seed)
+
+        # Get ploynomial
+        phi_train = build_poly(x, degree)
+        phi_test = build_poly(x_val, degree)
+
+        rmse_tr = []
+        rmse_te = []
+        update_rmse = False
+
+        for ind, lambda_ in enumerate(lambdas):
+
+            mse_tr, weights = ridge_regression(y, phi_train, lambda_)
+            mse_te = compute_loss(y_val, phi_test.dot(weights))
+            rmse_tr.append(np.sqrt(2*mse_tr))
+            rmse_te.append(np.sqrt(2*mse_te))
+
+            print("degree={d}, lambda={l:.3f}, Training RMSE={tr:.3f}, Testing RMSE={te:.3f}".format(
+                    d=degree, l=lambda_, tr=rmse_tr[ind], te=rmse_te[ind]))
+            print('train acc : ', accuracy(y, phi_train.dot(weights)))
+            val_acc = accuracy(y_val, phi_test.dot(weights))
+            print('validation acc : ', val_acc)
+
+            if(val_acc > best_acc):
+                best_acc = val_acc
+                best_degree = degree
+                best_lambda = lambda_
+                best_weights = weights
+                update_rmse = True
+        
+        if(update_rmse):
+            best_rmse_tr = rmse_tr
+            best_rmse_te = rmse_te
+
+        # Plot the best obtained results
+    plot_train_test(best_rmse_tr, best_rmse_te, lambdas, best_degree)
+
+    print('Best params for Ridge regression : degree = ',best_degree, ', lambda = ',best_lambda,', accuracy = ', best_acc)
+    
+    return best_weights, best_degree, best_lambda
+
 
 def build_poly(x, degree):
     """ polynomial basis functions for input data x, for j=0 up to j=degree. If x as multiple columns (feaures) 
@@ -62,6 +380,9 @@ def compute_loss(y, ty, loss_name='mse'):
         return _mse(y, ty)
     elif loss_name == 'mae':
         return _mae(y, ty)
+    elif loss_name == 'neg_log_likelihood':
+        loss = y.T.dot(np.log(ty)) + (1 - y).T.dot(np.log(1 - ty))
+        return np.squeeze(- loss)
     else:
         raise NotImplementedError
     
@@ -82,6 +403,10 @@ def _compute_gradient(y, tx, w, loss_name='mse'):
     elif loss_name == 'mae':
         e = y-tx.dot(w)
         return -1/(np.shape(y)[0])*(tx.T).dot(np.sign(e))
+    elif loss_name == 'neg_log_likelihood':
+        pred = sigmoid(tx.dot(w))
+        grad = tx.T.dot(np.squeeze(pred - y))
+        return grad
     else:
         raise NotImplementedError
 
@@ -113,29 +438,15 @@ def _batch_iter(y, tx, batch_size, num_batches=1, shuffle=True):
         end_index = min((batch_num + 1) * batch_size, data_size)
         if start_index != end_index:
             yield shuffled_y[start_index:end_index], shuffled_tx[start_index:end_index]
-			
-def sep_valid_train_data(x,y,ratio):
+
+
+def sep_valid_train_data(x, y, ratio, seed=0):
     """Separates data x, y into training(size: 1-ratio) and validation(size: ratio) set """
-    data_len =  np.shape(y)[0];
-    nr_validation_idx = np.floor(ratio*data_len);
-
-    # non repetitive random values
-    idx_to_validation_set = set()
-    #fill in the validation idx
-    while len(idx_to_validation_set) < nr_validation_idx:
-        idx_to_validation_set.add(np.random.randint(0, data_len))
-
-    # train indices = ALL - validation_set
-    idx_to_train_set = set(range(0,data_len)).difference(idx_to_validation_set)
-
-    # convert it to array so that it can be index
-    idx_to_train_set = np.array(list(idx_to_train_set))
-    idx_to_validation_set = np.array(list(idx_to_validation_set))
-
-    y_train = y[idx_to_train_set];
-    y_validation = y[idx_to_validation_set];
     
-    x_train = x[idx_to_train_set];
-    x_validation = x[idx_to_validation_set];
+    np.random.seed(seed)
+    ids = np.random.permutation(y.shape[0])
     
-    return y_train, x_train,  y_validation, x_validation
+    id_train = ids[:int(y.shape[0]*ratio)]
+    id_validation = ids[int(y.shape[0]*ratio):]
+    
+    return y[id_train], x[id_train], y[id_validation], x[id_validation]
