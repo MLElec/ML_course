@@ -52,9 +52,11 @@ def learning_by_gradient_descent(y, tx, w, gamma):
     """
     print('loss')
     y = np.expand_dims(y, axis=0)
-    loss = compute_loss(np.squeeze(y), tx.dot(w) )
+    #loss = compute_loss((y), tx.dot(w), loss_name='neg_log_likelihood')
+    loss = compute_loss(np.squeeze(y), tx.dot(w), loss_name='neg_log_likelihood' )
     print('gradient')
     gradient = _compute_gradient(y, tx, np.squeeze(w), loss_name='neg_log_likelihood')
+    #gradient = _compute_gradient(y, tx, (w), loss_name='neg_log_likelihood')
     result =  gamma * gradient
     result = np.expand_dims(result, axis=1)
     w = w- result
@@ -134,15 +136,22 @@ def test_logistic_GD(x, y, x_val, y_val, degrees, gamma):
         phi_train = build_poly(x, degree)
         phi_test = build_poly(x_val, degree)
 
-        weights = logistic_regression_GD(y, phi_train, max_iter=5000, gamma=gamma, threshold=1e-8)
+        weights = logistic_regression_GD(y, phi_train, max_iter=100, gamma=gamma, threshold=1e-8)
 
-        mse_te = compute_loss(np.squeeze(np.expand_dims(y, axis=0)), tx.dot(w) )
+        mse_te = compute_loss(np.squeeze(np.expand_dims(y_val, axis=0)), phi_test.dot(weights), loss_name='neg_log_likelihood' )
         rmse_te.append(np.sqrt(2*mse_te))
 
-        print("degree={d}, Testing RMSE={te:.3f}".format(
-                d=degree, te=rmse_te[ind]))
-        print('train acc : ', accuracy(y, phi_train.dot(weights)))
-        val_acc = accuracy(y_val, phi_test.dot(weights))
+        #print("degree={d}, Testing RMSE={te:.3f}".format(
+        #        d=degree, te=rmse_te[ind]))
+        y_test = y.copy()
+        y_test[y_test==0]=-1
+        print(y_test[1:10])
+        comp = phi_train.dot(weights)
+        print(comp[1:10])
+        print('train acc : ', accuracy(y_test, phi_train.dot(weights)))
+        y_val_test = y_val.copy()
+        y_val_test[y_val_test==0]=-1
+        val_acc = accuracy(y_val_test, phi_test.dot(weights))
         print('validation acc : ', val_acc)
         
         if(val_acc > best_acc):
@@ -387,8 +396,9 @@ def compute_loss(y, ty, loss_name='mse'):
     elif loss_name == 'mae':
         return _mae(y, ty)
     elif loss_name == 'neg_log_likelihood':
-        loss = y.T.dot(np.log(ty)) + (1 - y).T.dot(np.log(1 - ty))
-        return np.squeeze(- loss)
+        pred = sigmoid(ty)
+        loss = -1*( y.T.dot(np.log(pred)) + (1 - y).T.dot(np.log(1 - pred)))
+        return loss
     else:
         raise NotImplementedError
     
@@ -412,6 +422,7 @@ def _compute_gradient(y, tx, w, loss_name='mse'):
     elif loss_name == 'neg_log_likelihood':
         pred = sigmoid(tx.dot(w))
         grad = tx.T.dot(np.squeeze(pred - y))
+        #grad = tx.T.dot((pred - y))
         return grad
     else:
         raise NotImplementedError
