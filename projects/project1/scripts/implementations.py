@@ -43,33 +43,31 @@ def ridge_regression(y, tx, lambda_):
     return loss, w
 
 def sigmoid(xt):
-    """Sigmoid"""
-    return 1.0 / (1 + np.exp(-xt))
+    """Sigmoid - fixed numerical errors"""
+    #return 1.0 / (1 + np.exp(-xt))
+    return np.exp(-np.logaddexp(0,-xt))
 
 def learning_by_gradient_descent(y, tx, w, gamma):
     """
      1 step of GD
     """
-    print('loss')
+    loss = compute_loss(np.squeeze(y), np.squeeze(tx.dot(w)), loss_name='neg_log_likelihood')
     y = np.expand_dims(y, axis=0)
-    loss = compute_loss(np.squeeze(y), tx.dot(w) )
-    print('gradient')
     gradient = _compute_gradient(y, tx, np.squeeze(w), loss_name='neg_log_likelihood')
     result =  gamma * gradient
     result = np.expand_dims(result, axis=1)
     w = w- result
     return loss, w
 
-def penalized_logistic_regression(y, tx, w, lambda_):
-    print('loss')
-    loss = compute_loss(np.squeeze(y), np.squeeze(tx.dot(w)), loss_name='neg_log_likelihood' ) + lambda_ * np.squeeze(w.T.dot(w))
-    print('gradient')
-    gradient = _compute_gradient(np.squeeze(y), tx, w, loss_name='neg_log_likelihood') + 2 * lambda_ * w
-    return loss, gradient
+def penalized_logistic_regression(y, tx, w, lambda_, gamma):
 
-def learning_by_penalized_gradient(y, tx, w, gamma, lambda_):
-    loss, gradient = penalized_logistic_regression(y, tx, w, lambda_)
-    w -= gamma * gradient
+    loss = compute_loss(np.squeeze(y), np.squeeze(tx.dot(w)), loss_name='neg_log_likelihood') + lambda_ * np.squeeze(w.T.dot(w))
+    y = np.expand_dims(y, axis=0)
+    gradient = _compute_gradient(y, tx, np.squeeze(w), loss_name='neg_log_likelihood');
+    gradient = gradient + np.squeeze(2 * lambda_ * w)
+    result =  gamma * gradient
+    result = np.expand_dims(result, axis=1)
+    w = w- result
     return loss, w
 
 def logistic_regression_GD(y, x, max_iter, threshold, gamma):
@@ -78,7 +76,6 @@ def logistic_regression_GD(y, x, max_iter, threshold, gamma):
 
     tx = x
     w = np.zeros((tx.shape[1], 1))
-    print("Start the logistic regression")
     # start the logistic regression
     for iter in range(max_iter):
         # get loss and update w.
@@ -86,8 +83,9 @@ def logistic_regression_GD(y, x, max_iter, threshold, gamma):
         if( np.isnan(loss)):
             break;
         # log info
-        if iter % 100 == 0:
-            print("Current iteration={i}, loss={l}".format(i=iter, l=loss))
+
+        #if iter % 100 == 0:
+        #    print("Current iteration={i}, loss={l}".format(i=iter, l=loss))
         # converge criterion
         losses.append(loss)
         if len(losses) > 1 and np.abs(losses[-1] - losses[-2]) < threshold:
@@ -96,25 +94,21 @@ def logistic_regression_GD(y, x, max_iter, threshold, gamma):
     return w;
 
 def logistic_regression_penalized_GD(y, x, max_iter, threshold, gamma, lambda_):
-    # init parameters
     losses = []
 
-    #    tx = np.c_[np.ones((y.shape[0], 1)), x]
     tx = x
     w = np.zeros((tx.shape[1], 1))
-    print("Start the logistic regression")
     # start the logistic regression
     for iter in range(max_iter):
-        loss, w = learning_by_penalized_gradient(y, tx, w, gamma, lambda_)
-        #break;
+        # get loss and update w.
+        loss, w = penalized_logistic_regression(y, tx, w, gamma, lambda_)
         if( np.isnan(loss)):
             break;
         # log info
-        if iter % 100 == 0:
-            print("Current iteration={i}, loss={l}".format(i=iter, l=loss))
+        #if iter % 100 == 0:
+        #    print("Current iteration={i}, loss={l}".format(i=iter, l=loss))
         # converge criterion
         losses.append(loss)
-        #print(loss)
         if len(losses) > 1 and np.abs(losses[-1] - losses[-2]) < threshold:
             break;
     print("STOP it={i}, loss={l} ".format(i=iter,l=loss))
@@ -134,15 +128,11 @@ def test_logistic_GD(x, y, x_val, y_val, degrees, gamma):
         phi_train = build_poly(x, degree)
         phi_test = build_poly(x_val, degree)
 
-        weights = logistic_regression_GD(y, phi_train, max_iter=5000, gamma=gamma, threshold=1e-8)
+        weights = logistic_regression_GD(y, phi_train, max_iter=500, gamma=gamma, threshold=1e-8)
+        
 
-        mse_te = compute_loss(np.squeeze(np.expand_dims(y, axis=0)), tx.dot(w) )
-        rmse_te.append(np.sqrt(2*mse_te))
-
-        print("degree={d}, Testing RMSE={te:.3f}".format(
-                d=degree, te=rmse_te[ind]))
-        print('train acc : ', accuracy(y, phi_train.dot(weights)))
-        val_acc = accuracy(y_val, phi_test.dot(weights))
+        print("degree={d}".format(  d=degree))
+        val_acc = accuracy(np.squeeze(y_val), np.squeeze(phi_test.dot(weights)))
         print('validation acc : ', val_acc)
         
         if(val_acc > best_acc):
@@ -153,6 +143,50 @@ def test_logistic_GD(x, y, x_val, y_val, degrees, gamma):
     print('Best params for Least Squares : degree = ',best_degree, ', accuracy = ', best_acc)
     
     return best_weights, best_degree
+
+def test_penalized_logistic_GD(x, y, x_val, y_val, degrees, gamma, lambdas):
+    
+    best_acc = 0
+    best_degree = 0
+    best_lambda = 0
+    best_rmse_tr = []
+    best_rmse_te = []
+    best_weights = []
+    for degree in degrees:
+        degree = int(degree)
+        #lambdas = np.logspace(-7, 2, 20)
+
+        # Split sets
+        #x_train, x_test, y_train, y_test = split_data(x, y, ratio, seed)
+
+        # Get ploynomial
+        phi_train = build_poly(x, degree)
+        phi_test = build_poly(x_val, degree)
+
+        rmse_te = []
+        update_rmse = False
+
+        for ind, lambda_ in enumerate(lambdas):
+
+            weights = logistic_regression_penalized_GD(y, phi_train, max_iter=500, gamma=gamma, threshold=1e-8, lambda_=lambda_)
+
+            print("degree={d}, lambda={l:.8f},".format(
+                    d=degree, l=lambda_))
+            val_acc = accuracy(np.squeeze(y_val), np.squeeze(phi_test.dot(weights)))
+            print('validation acc : ', val_acc)
+
+            if(val_acc > best_acc):
+                best_acc = val_acc
+                best_degree = degree
+                best_lambda = lambda_
+                best_weights = weights
+        
+
+        # Plot the best obtained results
+
+    print('Best params for Penalized Logistic regression : degree = ',best_degree, ', lambda = ',best_lambda,', accuracy = ', best_acc)
+    
+    return best_weights, best_degree, best_lambda
 
 def calculate_hessian(y, tx, w):
     """return the hessian of the loss function. - smart multiplication"""
@@ -387,8 +421,12 @@ def compute_loss(y, ty, loss_name='mse'):
     elif loss_name == 'mae':
         return _mae(y, ty)
     elif loss_name == 'neg_log_likelihood':
-        loss = y.T.dot(np.log(ty)) + (1 - y).T.dot(np.log(1 - ty))
-        return np.squeeze(- loss)
+        # finxe
+        #loss = y.T.dot(np.log(ty)) + (1 - y).T.dot(np.log(1 - ty))
+        #return np.squeeze(- loss)
+        ty[ty>=23] = 23;
+        return  np.sum( np.log(1+np.exp(ty)) - y.dot(ty) )
+        
     else:
         raise NotImplementedError
     
