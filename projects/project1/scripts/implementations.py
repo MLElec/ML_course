@@ -70,14 +70,20 @@ def penalized_logistic_regression(y, tx, w, lambda_, gamma):
     w = w- result
     return loss, w
 
-def logistic_regression_GD(y, x, max_iter, threshold, gamma):
+def logistic_regression(y, tx, initial_w, max_iters, gamma):
+    return logistic_regression_GD(y, tx, initial_w, max_iters, gamma)
+
+def logistic_regression_GD(y, tx, initial_w = None, max_iters=500, gamma=5e-8, threshold=1e-8):
     # init parameters
     losses = []
 
-    tx = x
-    w = np.zeros((tx.shape[1], 1))
+    if initial_w is not None:
+        w = initial_w
+    else:
+        w = np.zeros((tx.shape[1], 1))
+    
     # start the logistic regression
-    for iter in range(max_iter):
+    for iter in range(max_iters):
         # get loss and update w.
         loss, w = learning_by_gradient_descent(y, tx, w, gamma)
         if( np.isnan(loss)):
@@ -91,15 +97,22 @@ def logistic_regression_GD(y, x, max_iter, threshold, gamma):
         if len(losses) > 1 and np.abs(losses[-1] - losses[-2]) < threshold:
             break;
     #print("STOP it={i}, loss={l} ".format(i=iter,l=loss))
-    return w;
+    return loss, w;
 
-def logistic_regression_penalized_GD(y, x, max_iter, threshold, gamma, lambda_):
+def reg_logistic_regression(y, tx, lambda_, initial_w, max_iters, gamma):
+    return logistic_regression_penalized_GD(y, tx, lambda_, initial_w, max_iters, gamma)
+
+def logistic_regression_penalized_GD(y, tx, lambda_, initial_w = None,  max_iters=500, gamma=5e-8, threshold=1e-8):
     losses = []
 
-    tx = x
+    if initial_w is not None:
+        w = initial_w
+    else:
+        w = np.zeros((tx.shape[1], 1))
+    
     w = np.zeros((tx.shape[1], 1))
     # start the logistic regression
-    for iter in range(max_iter):
+    for iter in range(max_iters):
         # get loss and update w.
         loss, w = penalized_logistic_regression(y, tx, w, gamma, lambda_)
         if( np.isnan(loss)):
@@ -112,7 +125,7 @@ def logistic_regression_penalized_GD(y, x, max_iter, threshold, gamma, lambda_):
         if len(losses) > 1 and np.abs(losses[-1] - losses[-2]) < threshold:
             break;
     #print("STOP it={i}, loss={l} ".format(i=iter,l=loss))
-    return w;
+    return loss, w;
 
 def test_logistic_GD(x, y, x_val, y_val, degrees, gamma):
     
@@ -127,11 +140,11 @@ def test_logistic_GD(x, y, x_val, y_val, degrees, gamma):
         # Get ploynomial
         phi_train = build_poly(x, degree)
         phi_test = build_poly(x_val, degree)
-
-        weights = logistic_regression_GD(y, phi_train, max_iter=500, gamma=gamma, threshold=1e-8)
+        loss, weights  = logistic_regression_GD(y, phi_train, max_iters=500, gamma=gamma, threshold=1e-8)
         
 
         print("degree={d}".format(  d=degree))
+        np.squeeze(y).shape
         print('train acc : ', accuracy(np.squeeze(y), np.squeeze(phi_train.dot(weights))))
         val_acc = accuracy(np.squeeze(y_val), np.squeeze(phi_test.dot(weights)))
         print('validation acc : ', val_acc)
@@ -141,7 +154,7 @@ def test_logistic_GD(x, y, x_val, y_val, degrees, gamma):
             best_degree = degree
             best_weights = weights
 
-    print('Best params for Least Squares : degree = ',best_degree, ', accuracy = ', best_acc)
+    print('Best params for Logistic : degree = ',best_degree, ', accuracy = ', best_acc)
     
     return best_weights, best_degree
 
@@ -169,10 +182,11 @@ def test_penalized_logistic_GD(x, y, x_val, y_val, degrees, gamma, lambdas):
 
         for ind, lambda_ in enumerate(lambdas):
 
-            weights = logistic_regression_penalized_GD(y, phi_train, max_iter=500, gamma=gamma, threshold=1e-8, lambda_=lambda_)
+            loss, weights = logistic_regression_penalized_GD(y, phi_train, max_iters=500, gamma=gamma, threshold=1e-8, lambda_=lambda_)
 
             print("degree={d}, lambda={l:.8f},".format(
                     d=degree, l=lambda_))
+            np.squeeze(y).shape
             print('train acc : ', accuracy(np.squeeze(y), np.squeeze(phi_train.dot(weights))))
             val_acc = accuracy(np.squeeze(y_val), np.squeeze(phi_test.dot(weights)))
             print('validation acc : ', val_acc)
@@ -238,7 +252,7 @@ def logistic_regression_Newton(y, x, max_iter, threshold, gamma):
         #print(loss)
         if len(losses) > 1 and losses[-2] - losses[-1] < threshold:
             break;
-    print("STOP it={i}, loss={l} ".format(i=iter,l=loss))
+    #print("STOP it={i}, loss={l} ".format(i=iter,l=loss))
     return w;
 
 def test_logistic_Newton(x, y, x_val, y_val, degrees, gamma):
@@ -473,7 +487,7 @@ def _batch_iter(y, tx, batch_size, num_batches=1, shuffle=True):
     data_size = len(y)
 
     if shuffle:
-        shuffle_indices = np.random.permutation(np.arange(data_size), seed=0)
+        shuffle_indices = np.random.permutation(np.arange(data_size))
         shuffled_y = y[shuffle_indices]
         shuffled_tx = tx[shuffle_indices]
     else:
