@@ -50,13 +50,20 @@ def learning_by_gradient_descent(y, tx, w, gamma):
     """
      1 step of GD
     """
+    print('loss')
+    y = np.expand_dims(y, axis=0)
     loss = compute_loss(np.squeeze(y), tx.dot(w), loss_name='neg_log_likelihood' )
-    gradient = _compute_gradient(np.squeeze(y), np.squeeze(tx), w , loss_name='neg_log_likelihood')
-    w = w -  gamma * gradient
+    print('gradient')
+    gradient = _compute_gradient(y, tx, np.squeeze(w), loss_name='neg_log_likelihood')
+    result =  gamma * gradient
+    result = np.expand_dims(result, axis=1)
+    w = w- result
     return loss, w
 
 def penalized_logistic_regression(y, tx, w, lambda_):
+    print('loss')
     loss = compute_loss(np.squeeze(y), np.squeeze(tx.dot(w)), loss_name='neg_log_likelihood' ) + lambda_ * np.squeeze(w.T.dot(w))
+    print('gradient')
     gradient = _compute_gradient(np.squeeze(y), tx, w, loss_name='neg_log_likelihood') + 2 * lambda_ * w
     return loss, gradient
 
@@ -220,7 +227,7 @@ def test_logistic_Newton(x, y, x_val, y_val, degrees, gamma):
 
         print("degree={d}, Testing RMSE={te:.3f}".format(
                 d=degree,  te=rmse_te[ind]))
-        print('train acc : ', accuracy(y, np.squeeze(phi_test.dot(weights))))
+        print('train acc : ', accuracy(y, np.squeeze(phi_train.dot(weights))))
         val_acc = accuracy(y_val, np.squeeze(phi_test.dot(weights)))
         print('validation acc : ', val_acc)
         
