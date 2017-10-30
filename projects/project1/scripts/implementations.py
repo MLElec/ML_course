@@ -90,7 +90,7 @@ def logistic_regression_GD(y, x, max_iter, threshold, gamma):
         losses.append(loss)
         if len(losses) > 1 and np.abs(losses[-1] - losses[-2]) < threshold:
             break;
-    print("STOP it={i}, loss={l} ".format(i=iter,l=loss))
+    #print("STOP it={i}, loss={l} ".format(i=iter,l=loss))
     return w;
 
 def logistic_regression_penalized_GD(y, x, max_iter, threshold, gamma, lambda_):
@@ -111,7 +111,7 @@ def logistic_regression_penalized_GD(y, x, max_iter, threshold, gamma, lambda_):
         losses.append(loss)
         if len(losses) > 1 and np.abs(losses[-1] - losses[-2]) < threshold:
             break;
-    print("STOP it={i}, loss={l} ".format(i=iter,l=loss))
+    #print("STOP it={i}, loss={l} ".format(i=iter,l=loss))
     return w;
 
 def test_logistic_GD(x, y, x_val, y_val, degrees, gamma):
@@ -132,6 +132,7 @@ def test_logistic_GD(x, y, x_val, y_val, degrees, gamma):
         
 
         print("degree={d}".format(  d=degree))
+        print('train acc : ', accuracy(np.squeeze(y), np.squeeze(phi_train.dot(weights))))
         val_acc = accuracy(np.squeeze(y_val), np.squeeze(phi_test.dot(weights)))
         print('validation acc : ', val_acc)
         
@@ -172,6 +173,7 @@ def test_penalized_logistic_GD(x, y, x_val, y_val, degrees, gamma, lambdas):
 
             print("degree={d}, lambda={l:.8f},".format(
                     d=degree, l=lambda_))
+            print('train acc : ', accuracy(np.squeeze(y), np.squeeze(phi_train.dot(weights))))
             val_acc = accuracy(np.squeeze(y_val), np.squeeze(phi_test.dot(weights)))
             print('validation acc : ', val_acc)
 
@@ -471,7 +473,7 @@ def _batch_iter(y, tx, batch_size, num_batches=1, shuffle=True):
     data_size = len(y)
 
     if shuffle:
-        shuffle_indices = np.random.permutation(np.arange(data_size))
+        shuffle_indices = np.random.permutation(np.arange(data_size), seed=0)
         shuffled_y = y[shuffle_indices]
         shuffled_tx = tx[shuffle_indices]
     else:
