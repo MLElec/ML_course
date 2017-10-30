@@ -52,7 +52,7 @@ def learning_by_gradient_descent(y, tx, w, gamma):
     """
     print('loss')
     y = np.expand_dims(y, axis=0)
-    loss = compute_loss(np.squeeze(y), tx.dot(w), loss_name='neg_log_likelihood' )
+    loss = compute_loss(np.squeeze(y), tx.dot(w) )
     print('gradient')
     gradient = _compute_gradient(y, tx, np.squeeze(w), loss_name='neg_log_likelihood')
     result =  gamma * gradient
@@ -136,12 +136,11 @@ def test_logistic_GD(x, y, x_val, y_val, degrees, gamma):
 
         weights = logistic_regression_GD(y, phi_train, max_iter=5000, gamma=gamma, threshold=1e-8)
 
-        mse_te = compute_loss(y_val, phi_test.dot(weights))
-        rmse_tr.append(np.sqrt(2*mse_tr))
+        mse_te = compute_loss(np.squeeze(np.expand_dims(y, axis=0)), tx.dot(w) )
         rmse_te.append(np.sqrt(2*mse_te))
 
-        print("degree={d}, Training RMSE={tr:.3f}, Testing RMSE={te:.3f}".format(
-                d=degree, tr=rmse_tr[ind], te=rmse_te[ind]))
+        print("degree={d}, Testing RMSE={te:.3f}".format(
+                d=degree, te=rmse_te[ind]))
         print('train acc : ', accuracy(y, phi_train.dot(weights)))
         val_acc = accuracy(y_val, phi_test.dot(weights))
         print('validation acc : ', val_acc)
