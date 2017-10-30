@@ -42,10 +42,13 @@ def ridge_regression(y, tx, lambda_):
     loss = compute_loss(y, tx.dot(w))
     return loss, w
 
-def sigmoid(xt):
+def sigmoid(xt, cst_exp=1e-15):
     """Sigmoid - fixed numerical errors"""
     #return 1.0 / (1 + np.exp(-xt))
-    return np.exp(-np.logaddexp(0,-xt))
+    sig = np.exp(-np.logaddexp(0,-xt))
+    sig[sig > 1 - cst_exp] =  1 - cst_exp
+    sig[sig < cst_exp] = cst_exp
+    return sig
 
 def learning_by_gradient_descent(y, tx, w, gamma):
     """
@@ -143,9 +146,13 @@ def test_logistic_GD(x, y, x_val, y_val, degrees, gamma):
 
         loss, weights = logistic_regression_GD(y, phi_train, max_iter=500, gamma=gamma, threshold=1e-8)
         
-
         print("degree={d}".format(  d=degree))
-        val_acc = accuracy(np.squeeze(y_val), np.squeeze(phi_test.dot(weights)))
+        y_range_train = (1+np.sign(np.squeeze(phi_train.dot(weights))))/2
+        y_range_val = (1+np.sign(np.squeeze(phi_test.dot(weights))))/2
+        val_train = accuracy(np.squeeze(y), y_range_train)
+        val_acc = accuracy(np.squeeze(y_val), y_range_val)
+        
+        print('train acc : ', val_train)
         print('validation acc : ', val_acc)
         
         if(val_acc > best_acc):
@@ -185,9 +192,16 @@ def test_penalized_logistic_GD(x, y, x_val, y_val, degrees, gamma, lambdas):
 
             print("degree={d}, lambda={l:.8f},".format(
                     d=degree, l=lambda_))
-            val_acc = accuracy(np.squeeze(y_val), np.squeeze(phi_test.dot(weights)))
-            print('validation acc : ', val_acc)
 
+            print("degree={d}".format(  d=degree))
+            y_range_train = (1+np.sign(np.squeeze(phi_train.dot(weights))))/2
+            y_range_val = (1+np.sign(np.squeeze(phi_test.dot(weights))))/2
+            val_train = accuracy(np.squeeze(y), y_range_train)
+            val_acc = accuracy(np.squeeze(y_val), y_range_val)
+            
+            print('train acc : ', val_train)
+            print('validation acc : ', val_acc)
+        
             if(val_acc > best_acc):
                 best_acc = val_acc
                 best_degree = degree
@@ -434,12 +448,7 @@ def compute_loss(y, ty, loss_name='mse'):
     elif loss_name == 'mae':
         return _mae(y, ty)
     elif loss_name == 'neg_log_likelihood':
-        # finxe
-        #loss = y.T.dot(np.log(ty)) + (1 - y).T.dot(np.log(1 - ty))
-        #return np.squeeze(- loss)
-        ty[ty>=23] = 23;
-        return  np.sum( np.log(1+np.exp(ty)) - y.dot(ty) )
-        
+        return _logistic(y, ty) 
     else:
         raise NotImplementedError
     
@@ -452,6 +461,10 @@ def _mae(y, ty):
     e = np.abs(y-ty)
     loss = 1/(np.shape(y)[0])*np.sum(e)
     return loss
+
+def _logistic(y, ty):
+    y_pred = sigmoid(ty)
+    return -np.sum(y*np.log(y_pred) + (1-y)*np.log(1-y_pred))
 
 def _compute_gradient(y, tx, w, loss_name='mse'):
     if loss_name == 'mse':
