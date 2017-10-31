@@ -497,7 +497,7 @@ def _batch_iter(y, tx, batch_size, num_batches=1, shuffle=True):
     data_size = len(y)
 
     if shuffle:
-        shuffle_indices = np.random.permutation(np.arange(data_size), seed=0)
+        shuffle_indices = np.random.permutation(np.arange(data_size))
         shuffled_y = y[shuffle_indices]
         shuffled_tx = tx[shuffle_indices]
     else:

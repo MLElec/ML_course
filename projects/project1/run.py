@@ -10,9 +10,6 @@
 
 # In[ ]:
 
-import matplotlib
-matplotlib.use('PS')
-
 import os
 import numpy as np
 import scripts.implementations as lib  # Add personal library
