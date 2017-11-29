@@ -74,13 +74,21 @@ def load_test_set(dir_, data='test_set_images'):
     
     return x_data
 
-def normalize_data(data):
+def normalize_data(data, mean_ref=None, std_ref=None):
+    
+    if mean_ref is None or std_ref is None:
+        mean_ref = np.mean(data, axis=tuple(np.arange(data.ndim-1)))
+        std_ref = np.std(data-mean_ref, axis=tuple(np.arange(data.ndim-1)))
+    data = (data-mean_ref)/std_ref
+    return data, mean_ref, std_ref
+
+def normalize_data_imwise(data):
     # Data pre-processing, Normalize each image with itself
     n = data.shape[0]
     for i in range(n):
         xx = data[i,:,:]
-        xx -= np.mean(xx) # Centering in 0
-        xx /= np.linalg.norm(xx) # Normalizing to 1
+        xx -= np.mean(xx, axis=(0,1)) 
+        xx /= np.std(xx, axis=(0,1)) 
         data[i] = xx # Affect value
     return data
 
@@ -127,7 +135,7 @@ def get_patches_label(y_batch):
     y_label_unique = np.zeros((y_batch.shape[0]))
     # Take mean value of pixel to estiamte road yes or not
     for i in range(y_batch.shape[0]):
-        y_label_unique[i] = np.around(np.mean(y_batch[i]))
+        y_label_unique[i] = int(np.mean(y_batch[i]) > 0.25)
     return y_label_unique
 
 def load_image_train_by_id(_id, dir_, data='images', label='groundtruth'):
