@@ -1,5 +1,6 @@
 # Helper functions
 import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
 import numpy as np
 import os
 
@@ -30,6 +31,26 @@ def load_train_set(dir_, data='images', label='groundtruth', ratio=0.8, seed=0):
     
     return x_data[id_train], y_label[id_train], x_data[id_valid], y_label[id_valid], id_train, id_valid
 
+def load_test_set(path_data='data/test_set_images'):
+    # Look for all file sin subfolder, store filename and path to filename (each test file is in a separate folder)
+    files_data = []
+    path_test = []
+    for path, subdirs, files in os.walk(path_data):
+        for name in files:
+            files_data.append(name)
+            path_test.append(path)
+    # Get file ids to sort them (usedul for submission)
+    id_files = [int(file.replace('test_', '').replace('.png', '')) for file in files_data]
+    files_data = np.array(files_data)[np.argsort(id_files)]
+    path_test = np.array(path_test)[np.argsort(id_files)]
+    # Load firt file to get shape of images test and create dummy empty vector
+    shape_test = mpimg.imread(os.path.join(path_test[0], files_data[0])).shape
+    x_data = np.zeros((len(files_data),) + shape_test)
+    # Load all test images in subfolders
+    for i, (path, file) in enumerate(zip(path_test, files_data)):
+        x_data[i] = mpimg.imread(os.path.join(path, file))
+    
+    return x_data
 
 def get_patches_all(x_data, y_label=None, patch_size=16):
     # Compute final siz of array of patches
@@ -93,3 +114,42 @@ def get_useful_patches(patch_x, patch_y, min_threshold, max_threshold):
                 useful_patches_y = np.append(useful_patches_y, np.expand_dims(patch_y[i], axis=0), axis=0)
 
     return useful_patches_x, useful_patches_y
+
+
+def display_predictions(y_pred, img_ref, img_cgt=None, n_display=3):
+    
+    im_pred = np.reshape(y_pred, img_ref.shape[:3]).astype(np.float32)
+    id_display = np.random.permutation(len(img_ref))[:n_display]
+        
+    plt.figure(figsize=(16, 5*n_display))
+    for i in range(n_display):
+        plt.subplot(n_display,3,3*i+1)
+        plt.imshow(img_ref[id_display[i]]); plt.axis('off');
+        if img_cgt is not None:
+            plt.subplot(n_display,3,3*i+2)
+            plt.imshow(img_ref[id_display[i]]); plt.imshow(img_cgt[id_display[i]], alpha=0.3); plt.axis('off');
+        plt.subplot(n_display,3,3*i+3)
+        plt.imshow(img_ref[id_display[i]]); plt.imshow(im_pred[id_display[i]], alpha=0.3); plt.axis('off');
+        
+        
+def create_submission(y_pred, submission_filename, images_size=608, patch_size=16):
+    n_patches = images_size//patch_size
+    text = 'id,prediction'
+    with open(submission_filename, 'w') as f:
+        f.write('id,prediction')
+        for i in range(y_pred.shape[0]):
+            im = y_pred[i]
+            for j in range(0, im.shape[1], patch_size):
+                for k in range(0, im.shape[0], patch_size):
+                    patch = im[k:k + patch_size, j:j + patch_size]
+                    label = patch_to_label(patch)
+                    name = '{:03d}_{}_{},{}'.format(i+1, j, k, label)
+                    f.write('\n'+name)
+                    
+                    
+def patch_to_label(patch, foreground_threshold=0.25):
+    df = np.mean(patch)
+    if df > foreground_threshold:
+        return 1
+    else:
+        return 0
