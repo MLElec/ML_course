@@ -3,20 +3,23 @@ import datetime
 import numpy as np
 from sklearn.metrics import f1_score
 import os
+from collections import OrderedDict
+import matplotlib.pyplot as plt
+
 
 class Model:
     
-    def __init__(self, reg = 1e-3, n_filters = 64, kernel_size=3):
+    def __init__(self, reg = 1e-3, n_filters = 64, kernel_size=3, display_log=True):
                 
         # Settings model
         self.reg = reg
         self.n_filters = n_filters
         self.kernel_size = kernel_size
         
-        self.build_model()
+        self.build_model(display_log)
         
         
-    def build_model(self):
+    def build_model(self, display_log):
         
         tf.reset_default_graph()
 
@@ -30,58 +33,46 @@ class Model:
         class_weights = tf.constant([[1.0,1.0]]) 
         weights = tf.reduce_sum(class_weights * tf.cast(self.tf_labels, tf.float32), axis=1)
 
-        conv1 = tf.layers.conv2d(inputs=self.tf_data, filters=self.n_filters, kernel_size=self.kernel_size,
+        self.conv1 = tf.layers.conv2d(inputs=self.tf_data, filters=self.n_filters, kernel_size=self.kernel_size,
                                  kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
-        print("conv1 size", conv1.shape)
 
-        pool1 = tf.contrib.layers.max_pool2d(inputs=conv1, kernel_size=2, stride=2)
-        print("pool1 size", pool1.shape)
+        pool1 = tf.contrib.layers.max_pool2d(inputs=self.conv1, kernel_size=2, stride=2)
 
-        conv2 = tf.layers.conv2d(inputs=pool1, filters=self.n_filters*2, kernel_size=self.kernel_size, 
+        self.conv2 = tf.layers.conv2d(inputs=pool1, filters=self.n_filters*2, kernel_size=self.kernel_size, 
                                  kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
-        print("conv2 size", conv2.shape)
 
-        pool2 = tf.contrib.layers.max_pool2d(inputs=conv2, kernel_size=2, stride=2)
-        print("pool2 size", pool2.shape)
-
-        conv3 =tf.nn.dropout(tf.layers.conv2d(inputs=pool2, filters=self.n_filters*4, kernel_size=self.kernel_size, 
+        pool2 = tf.contrib.layers.max_pool2d(inputs=self.conv2, kernel_size=2, stride=2)
+        
+        self.conv3 =tf.nn.dropout(tf.layers.conv2d(inputs=pool2, filters=self.n_filters*4, kernel_size=self.kernel_size, 
                                               kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME'),
                              self.keep_prob) 
-        print("conv3 size", conv3.shape)
 
-        pool3 = tf.contrib.layers.max_pool2d(inputs=conv3, kernel_size=2, stride=2)
-        print("pool3 size", pool3.shape)
+        pool3 = tf.contrib.layers.max_pool2d(inputs=self.conv3, kernel_size=2, stride=2)
 
-        conv4 = tf.nn.dropout(tf.layers.conv2d(inputs=pool3, filters=self.n_filters*4, kernel_size=self.kernel_size, 
+        self.conv4 = tf.nn.dropout(tf.layers.conv2d(inputs=pool3, filters=self.n_filters*4, kernel_size=self.kernel_size, 
                                                kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME'),
                               self.keep_prob)
-        print("conv4 size", conv4.shape)
 
-        pool4 = tf.contrib.layers.max_pool2d(inputs=conv4, kernel_size=2, stride=2)
-        print("pool4 size", pool4.shape)
+        pool4 = tf.contrib.layers.max_pool2d(inputs=self.conv4, kernel_size=2, stride=2)
 
-        deconv1 = tf.nn.dropout(tf.layers.conv2d_transpose(inputs=pool4, filters=self.n_filters*4, kernel_size=4, strides=2,
+        self.deconv1 = tf.nn.dropout(tf.layers.conv2d_transpose(inputs=pool4, filters=self.n_filters*4, kernel_size=4, strides=2,
                                                            kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, 
                                                            padding='SAME'), self.keep_prob)
-        print("deconv1 size", deconv1.shape)
 
-        deconv2 = tf.nn.dropout(tf.layers.conv2d_transpose(inputs=deconv1, filters=self.n_filters*4, kernel_size=4, strides=2,
-                                                           kernel_regularizer=regularizer, activation=tf.nn.leaky_relu,
-                                                           padding='SAME'), self.keep_prob)
-        print("deconv2 size", deconv2.shape)
+        self.deconv2 = tf.nn.dropout(tf.layers.conv2d_transpose(inputs=self.deconv1, filters=self.n_filters*4, kernel_size=4,
+                                                           strides=2, kernel_regularizer=regularizer, 
+                                                           activation=tf.nn.leaky_relu, padding='SAME'), 
+                                self.keep_prob)
 
-        deconv3 = tf.layers.conv2d_transpose(inputs=deconv2, filters=self.n_filters*2, kernel_size=4, strides=2, 
+        self.deconv3 = tf.layers.conv2d_transpose(inputs=self.deconv2, filters=self.n_filters*2, kernel_size=4, strides=2, 
                                              kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
-        print("deconv3 size", deconv3.shape)
 
-        deconv4 = tf.layers.conv2d_transpose(inputs=deconv3, filters=self.n_filters, kernel_size=4, strides=2, 
+        self.deconv4 = tf.layers.conv2d_transpose(inputs=self.deconv3, filters=self.n_filters, kernel_size=4, strides=2, 
                                              kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
-        print("deconv4 size", deconv4.shape)
-
-        score_layer = tf.layers.conv2d(inputs=deconv4, filters=2, kernel_size=1,kernel_regularizer=regularizer)
-        print("score size", score_layer.shape)
-
-        logits = tf.reshape(score_layer, (-1,2))
+        
+        self.score_layer = tf.layers.conv2d(inputs=self.deconv4, filters=2, kernel_size=1,kernel_regularizer=regularizer)
+        
+        logits = tf.reshape(self.score_layer, (-1,2))
 
         self.cross_entropy = tf.losses.softmax_cross_entropy(onehot_labels=self.tf_labels, logits=logits, weights=weights)
         self.reg_variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -91,9 +82,24 @@ class Model:
         self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss)
         self.preds = tf.argmax(logits,axis=1,output_type=tf.int32)
         
+        if display_log:
+            print("conv1 size", self.conv1.shape)
+            print("pool1 size", pool1.shape)
+            print("conv2 size", self.conv2.shape)
+            print("pool2 size", pool2.shape)
+            print("conv3 size", self.conv3.shape)
+            print("pool3 size", pool3.shape)
+            print("conv4 size", self.conv4.shape)
+            print("pool4 size", pool4.shape)
+            print("deconv1 size", self.deconv1.shape)
+            print("deconv2 size", self.deconv2.shape)
+            print("deconv3 size", self.deconv3.shape)
+            print("deconv4 size", self.deconv4.shape)
+            print("score size", self.score_layer.shape)
+        
         
     def train_model(self, useful_patches_tr, useful_lab_tr, train_imgs, train_gt, val_imgs, val_gt, 
-                    n_epoch = 4, batch_size = 5, learning_rate_val = 1e-3, path_models='model'):
+                    n_epoch = 4, batch_size = 5, learning_rate_val = 1e-3, path_models='model', nmax=10):
         
         init = tf.global_variables_initializer()
         saver = tf.train.Saver()
@@ -122,8 +128,8 @@ class Model:
                 last_f1 =0
                 if epoch % 1 ==0:
 
-                    loss_train, f1_train = self.predict_model_cgt(sess, train_imgs, train_gt)
-                    loss_val, f1_val = self.predict_model_cgt(sess, val_imgs, val_gt)
+                    loss_train, f1_train = self.predict_model_cgt(sess, train_imgs, train_gt, nmax=nmax)
+                    loss_val, f1_val = self.predict_model_cgt(sess, val_imgs, val_gt, nmax=nmax)
 
                     print("Recap epoch ", epoch)
                     print("\t last minibatch, cross entropy : ", train_cross_entropy, "reg term : ", train_reg_term)
@@ -142,7 +148,7 @@ class Model:
             print("Model saved in file: %s" % self.save_path)
 
             
-    def predict_model_cgt(self, sess, imgs, gt, nmax=5):
+    def predict_model_cgt(self, sess, imgs, gt, nmax=10):
         imgs_size = gt.shape[0]
         splits = np.linspace(0, imgs_size, 1+imgs_size//nmax).astype(int)
 
@@ -167,7 +173,7 @@ class Model:
         return loss, f1
     
     
-    def predict_model(self, sess, imgs, nmax=5):
+    def predict_model(self, sess, imgs, nmax=10):
         imgs_size = imgs.shape[0]
         splits = np.linspace(0, imgs_size, 1+imgs_size//nmax).astype(int)
 
@@ -184,17 +190,37 @@ class Model:
         return pred_tot
             
         
-    def apply_model(self, img, path):
+    def apply_model(self, img, path, nmax=10):
         
         init = tf.global_variables_initializer()
         saver = tf.train.Saver()
         
         with tf.Session() as sess:
             saver.restore(sess, path)
-            pred = self.predict_model(sess, img)
+            pred = self.predict_model(sess, img, nmax=nmax)
 
         return pred
+    
+    def get_model_layers(self, img, path):
+        
+        init = tf.global_variables_initializer()
+        saver = tf.train.Saver()
+        
+        with tf.Session() as sess:
+            saver.restore(sess, path)
+          
+            conv_1, conv_2, conv_3, conv_4, deconv_1, deconv_2, deconv_3, deconv_4, score = sess.run(
+                [self.conv1, self.conv2, self.conv3, self.conv4, 
+                 self.deconv1, self.deconv2, self.deconv3, self.deconv4, self.score_layer], 
+                 feed_dict={self.tf_data : [img], self.keep_prob : 1})
+            layers = {'conv_1': conv_1, 'conv_2': conv_2, 'conv_3': conv_3, 'conv_4': conv_4, 
+                      'deconv_1': deconv_1, 'deconv_2': deconv_2, 'deconv_3': deconv_3, 'deconv_4': deconv_4, 
+                      'score': score}
+            layers = OrderedDict(sorted(layers.items()))
+        return layers
 
+    def predict_f1(self, gt, pred):
+        return f1_score(np.reshape(gt, -1), np.reshape(pred, -1), average='macro') 
             
     def one_hot_convert(self, vector, num_classes=None):
         """ (From https://stackoverflow.com/questions/29831489/numpy-1-hot-array)
@@ -225,4 +251,18 @@ class Model:
         result = np.zeros(shape=(len(vector), num_classes))
         result[np.arange(len(vector)), vector] = 1
         return result
-        
+    
+    
+    def plot_layers(self, im_src, layers):
+        n_lines = np.ceil((len(layers)+1)/3).astype(int)
+        plt.figure(figsize=(16, 5*n_lines))
+        # Base image (one that went through the layers)
+        plt.subplot(n_lines, 3, 1)
+        plt.imshow(im_src); plt.title('Source image'); plt.axis('off')
+        # Display all sub layers for viz
+        for i, key in enumerate(layers.keys()):
+            plt.subplot(n_lines, 3, i+2)
+            # Take mean of all layers ... better solution ?
+            im_layer = layers[key].mean(axis=3).squeeze()
+            # Normalize in rnage [-1, 1] for viz coherence
+            plt.imshow(im_layer/np.max(np.abs(im_layer)), cmap='viridis', vmin=-1, vmax=1); plt.title(key); plt.axis('off')

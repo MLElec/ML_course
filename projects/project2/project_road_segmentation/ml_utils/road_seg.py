@@ -116,7 +116,29 @@ def get_useful_patches(patch_x, patch_y, min_threshold, max_threshold):
     return useful_patches_x, useful_patches_y
 
 
+def normalize_data(data, mode='image_wise', **kwargs):
+    # Data pre-processing, Normalize each image with itself
+    if mode == 'image_wise':
+        n = data.shape[0]
+        for i in range(n):
+            xx = data[i]
+            xx -= np.mean(xx) # Centering in 0
+            #xx /= np.linalg.norm(xx) # Normalizing to 1
+            data[i] = xx # Affect value
+        return data
+    elif mode == 'all':
+        if 'mean_ref' not in kwargs or 'std_ref' not in kwargs:
+            kwargs['mean_ref'] = np.mean(data, axis=tuple(np.arange(data.ndim-1)))
+            kwargs['std_ref'] = np.std(data-kwargs['mean_ref'], axis=tuple(np.arange(data.ndim-1)))
+        data_norm = ((data-kwargs['mean_ref'])/kwargs['std_ref']).copy()
+        return data_norm, kwargs['mean_ref'], kwargs['std_ref']
+
+
 def display_predictions(y_pred, img_ref, img_cgt=None, n_display=3):
+    
+    if img_cgt is None:
+        display_predictions_nocgt(y_pred, img_ref, n_display)
+        return
     
     im_pred = np.reshape(y_pred, img_ref.shape[:3]).astype(np.float32)
     id_display = np.random.permutation(len(img_ref))[:n_display]
@@ -129,6 +151,21 @@ def display_predictions(y_pred, img_ref, img_cgt=None, n_display=3):
             plt.subplot(n_display,3,3*i+2)
             plt.imshow(img_ref[id_display[i]]); plt.imshow(img_cgt[id_display[i]], alpha=0.3); plt.axis('off');
         plt.subplot(n_display,3,3*i+3)
+        plt.imshow(img_ref[id_display[i]]); plt.imshow(im_pred[id_display[i]], alpha=0.3); plt.axis('off');
+        
+def display_predictions_nocgt(y_pred, img_ref, n_display=3):
+    
+    if len(y_pred.shape) == 1:
+        im_pred = np.reshape(y_pred, img_ref.shape[:3]).astype(np.float32)
+    else:
+        im_pred = y_pred
+    id_display = np.random.permutation(len(img_ref))[:n_display]
+        
+    plt.figure(figsize=(10, 5*n_display))
+    for i in range(n_display):
+        plt.subplot(n_display,2,2*i+1)
+        plt.imshow(img_ref[id_display[i]]); plt.axis('off');
+        plt.subplot(n_display,2,2*i+2)
         plt.imshow(img_ref[id_display[i]]); plt.imshow(im_pred[id_display[i]], alpha=0.3); plt.axis('off');
         
         
