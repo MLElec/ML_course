@@ -25,7 +25,7 @@ class Model:
 
         # Plae holders
         self.learning_rate = tf.placeholder(tf.float32)
-        self.tf_data = tf.placeholder(tf.float32,[None, None, None, 3])
+        self.tf_data = tf.placeholder(tf.float32,[None, None, None, 4])
         self.tf_labels = tf.placeholder(tf.int32,[None,2])
         self.keep_prob = tf.placeholder(tf.float32)
         

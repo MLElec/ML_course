@@ -5,14 +5,19 @@ import numpy as np
 import os
 
 
-def load_train_set(dir_, data='images', label='groundtruth', ratio=0.8, seed=0):
+def load_train_set(dir_, data='images', label='groundtruth', use_augmented=False, ratio=0.8, seed=0):
     np.random.seed(seed)
     # Define path to data
+
     path_data = os.path.join(dir_, data)
     path_label = os.path.join(dir_, label)
+    if(use_augmented == True):
+        path_data = path_data + '/output'
+        path_label = path_label + '/output'
     # Load train data files and sort them according to satImage_xxx.png where xxx is the id number
     files_data = np.array(os.listdir(path_label))
-    id_sort = np.argsort([ int(filename[9:12]) for filename in files_data])
+
+    id_sort = np.argsort([ int(filename[9:12]) for filename in files_data if len(filename) > 11 ])
     files_data = files_data[id_sort]
     # Check first image to check the size (different for data and label)
     shape_train = mpimg.imread(os.path.join(path_data, files_data[0])).shape
@@ -21,8 +26,9 @@ def load_train_set(dir_, data='images', label='groundtruth', ratio=0.8, seed=0):
     x_data = np.zeros((len(files_data),) + shape_train)
     y_label = np.zeros((len(files_data),) + shape_label)
     for i, file in enumerate(files_data):
-        x_data[i] = mpimg.imread(os.path.join(path_data, file))
-        y_label[i] = np.round(mpimg.imread(os.path.join(path_label, file)))
+        if len(file) > 11:
+            x_data[i] = mpimg.imread(os.path.join(path_data, file))
+            y_label[i] = np.round(mpimg.imread(os.path.join(path_label, file)))
         
     # Id split for Valisation and test
     ids = np.random.permutation(x_data.shape[0])
@@ -104,6 +110,8 @@ def get_useful_patches(patch_x, patch_y, min_threshold, max_threshold):
 
     first_patch=True
     for i in range(patch_x.shape[0]):
+        if i % 1000 ==999:
+            print(i,'/',patch_x.shape[0])
         if np.mean(patch_y[i])>min_threshold and np.mean(patch_y[i])<max_threshold:
             if first_patch:
                 useful_patches_x =  np.expand_dims(patch_x[i], axis=0)
