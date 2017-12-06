@@ -5,7 +5,7 @@ from sklearn.metrics import f1_score
 import os
 from collections import OrderedDict
 import matplotlib.pyplot as plt
-
+import ml_utils.road_seg as rs
 
 class Model:
     
@@ -19,15 +19,17 @@ class Model:
         self.build_model(display_log)
         
         
-    def build_model(self, display_log):
+    def build_model(self, display_log, seed=0):
         
         tf.reset_default_graph()
+        tf.set_random_seed(seed)
 
         # Plae holders
         self.learning_rate = tf.placeholder(tf.float32)
         self.tf_data = tf.placeholder(tf.float32,[None, None, None, 3])
         self.tf_labels = tf.placeholder(tf.int32,[None,2])
         self.keep_prob = tf.placeholder(tf.float32)
+        self.tf_pen_road = tf.placeholder(tf.float32,[None,2])
         
         regularizer = tf.contrib.layers.l2_regularizer(scale=self.reg)
         class_weights = tf.constant([[1.0,1.0]]) 
@@ -46,33 +48,59 @@ class Model:
         self.conv3 =tf.nn.dropout(tf.layers.conv2d(inputs=pool2, filters=self.n_filters*4, kernel_size=self.kernel_size, 
                                               kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME'),
                              self.keep_prob) 
+        # self.conv3 =tf.layers.conv2d(inputs=pool2, filters=self.n_filters*4, kernel_size=self.kernel_size, 
+        #                             kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
+                                  
 
         pool3 = tf.contrib.layers.max_pool2d(inputs=self.conv3, kernel_size=2, stride=2)
 
         self.conv4 = tf.nn.dropout(tf.layers.conv2d(inputs=pool3, filters=self.n_filters*4, kernel_size=self.kernel_size, 
                                                kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME'),
                               self.keep_prob)
-
+        
+        # self.conv4 = tf.layers.conv2d(inputs=pool3, filters=self.n_filters*4, kernel_size=self.kernel_size, 
+        #                              kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
+        
         pool4 = tf.contrib.layers.max_pool2d(inputs=self.conv4, kernel_size=2, stride=2)
 
         self.deconv1 = tf.nn.dropout(tf.layers.conv2d_transpose(inputs=pool4, filters=self.n_filters*4, kernel_size=4, strides=2,
                                                            kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, 
                                                            padding='SAME'), self.keep_prob)
+        # self.deconv1 = tf.layers.conv2d_transpose(inputs=pool4, filters=self.n_filters*4, kernel_size=4, strides=2,
+        #                                          kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
 
-        self.deconv2 = tf.nn.dropout(tf.layers.conv2d_transpose(inputs=self.deconv1, filters=self.n_filters*4, kernel_size=4,
+        # deconv2_c = tf.concat([self.deconv1, self.conv3], axis=3)
+        
+        deconv1_c = tf.concat([self.deconv1, self.conv4], axis=3)
+
+        self.deconv2 = tf.nn.dropout(tf.layers.conv2d_transpose(inputs=deconv1_c, filters=self.n_filters*4, kernel_size=4,
                                                            strides=2, kernel_regularizer=regularizer, 
                                                            activation=tf.nn.leaky_relu, padding='SAME'), 
-                                self.keep_prob)
+                                    self.keep_prob)
+        
+        deconv2_c = tf.concat([self.deconv2, self.conv3], axis=3)
 
-        self.deconv3 = tf.layers.conv2d_transpose(inputs=self.deconv2, filters=self.n_filters*2, kernel_size=4, strides=2, 
-                                             kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
-
-        self.deconv4 = tf.layers.conv2d_transpose(inputs=self.deconv3, filters=self.n_filters, kernel_size=4, strides=2, 
+        #self.deconv2 = tf.layers.conv2d_transpose(inputs=self.deconv1, filters=self.n_filters*4, kernel_size=4,
+        #                                          strides=2, kernel_regularizer=regularizer, 
+        #                                          activation=tf.nn.leaky_relu, padding='SAME')
+        
+        self.deconv3 = tf.layers.conv2d_transpose(inputs=deconv2_c, filters=self.n_filters*2, kernel_size=4, strides=2, 
+                                             kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')        
+        
+        deconv3_c = tf.concat([self.deconv3, self.conv2], axis=3)
+            
+        self.deconv4 = tf.layers.conv2d_transpose(inputs=deconv3_c, filters=self.n_filters, kernel_size=4, strides=2, 
                                              kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
         
-        self.score_layer = tf.layers.conv2d(inputs=self.deconv4, filters=2, kernel_size=1,kernel_regularizer=regularizer)
+        deconv4_c = tf.concat([self.deconv4, self.conv1], axis=3)
+
+        self.score_layer = tf.layers.conv2d(inputs=deconv4_c, filters=2, kernel_size=1,kernel_regularizer=regularizer)
         
         logits = tf.reshape(self.score_layer, (-1,2))
+        #y = tf.nn.softmax(logits)
+        
+        #y_label = tf.multiply(tf.cast(self.tf_labels, tf.float32), self.tf_pen_road)
+        #self.cross_entropy = tf.reduce_mean(-tf.reduce_sum(tf.multiply(y_label, tf.log(y)), 1))
 
         self.cross_entropy = tf.losses.softmax_cross_entropy(onehot_labels=self.tf_labels, logits=logits, weights=weights)
         self.reg_variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
@@ -92,14 +120,18 @@ class Model:
             print("conv4 size", self.conv4.shape)
             print("pool4 size", pool4.shape)
             print("deconv1 size", self.deconv1.shape)
+            print("deconv1_c size", deconv1_c.shape)
             print("deconv2 size", self.deconv2.shape)
+            print("deconv2_c size", deconv2_c.shape)
             print("deconv3 size", self.deconv3.shape)
-            print("deconv4 size", self.deconv4.shape)
+            print("deconv3_c size", deconv3_c.shape)
+            print("deconv4 size", self.deconv4.shape) 
+            print("deconv4_c size", deconv4_c.shape)
             print("score size", self.score_layer.shape)
         
         
     def train_model(self, useful_patches_tr, useful_lab_tr, train_imgs, train_gt, val_imgs, val_gt, 
-                    n_epoch = 4, batch_size = 5, learning_rate_val = 1e-3, path_models='model', nmax=10):
+                    n_epoch = 4, batch_size = 5, learning_rate_val = 5e-4, path_models='model', nmax=10, seed=0):
         
         init = tf.global_variables_initializer()
         saver = tf.train.Saver()
@@ -119,14 +151,15 @@ class Model:
                     batch_idx = indices[batch_iter*batch_size:min((batch_iter+1)*batch_size, indices.shape[0])]
                     batch_x = useful_patches_tr[batch_idx]
                     batch_y = self.one_hot_convert(np.reshape(useful_lab_tr[batch_idx], [-1]))
+                    batch_pen_road = rs.get_one_hot_penalization(useful_lab_tr[batch_idx])
 
                     _, batch_loss, train_cross_entropy, train_reg_term = sess.run(
                         [self.train_step, self.loss, self.cross_entropy, self.reg_term], # Returns
                         feed_dict={self.tf_data : batch_x, self.tf_labels : batch_y, # Feed variables
-                                   self.keep_prob : 0.8, self.learning_rate : learning_rate_val})
+                                   self.keep_prob : 0.8, self.tf_pen_road : batch_pen_road,
+                                   self.learning_rate : learning_rate_val})
 
-                last_f1 =0
-                if epoch % 1 ==0:
+                if epoch % 1 == 0:
 
                     loss_train, f1_train = self.predict_model_cgt(sess, train_imgs, train_gt, nmax=nmax)
                     loss_val, f1_val = self.predict_model_cgt(sess, val_imgs, val_gt, nmax=nmax)
@@ -138,14 +171,19 @@ class Model:
                     loss_time = np.concatenate((loss_time, [[loss_train, loss_val]]), axis=0)
                     f1_time = np.concatenate((loss_time, [[f1_train, f1_val]]), axis=0)
 
-                    if f1_train < last_f1:
-                        learning_rate_val/=2
-                    last_f1 = f1_train
+                if epoch == 40:
+                    learning_rate_val = 5e-2*learning_rate_val
 
+            # Save tensorflow variables
             str_date = datetime.datetime.now().strftime("%Y_%m_%d_%Hh%M")
-            self.save_path =  os.path.join(path_models, str_date + '_model.ckpt')
+            self.save_path_model =  os.path.join(path_models, str_date + '_model.ckpt')
             saver.save(sess, self.save_path)
-            print("Model saved in file: %s" % self.save_path)
+            print("Model saved in file: %s" % self.save_path_model)
+            
+            # Save train and val f1 score / loss evolution
+            self.save_path_stats =  os.path.join(path_models, str_date + '_stats.npy')
+            np.save(self.save_path_stats, {'loss': loss_time, 'f1': f1_time})
+            print("Stats saved to file: %s" % self.save_path_stats)
 
             
     def predict_model_cgt(self, sess, imgs, gt, nmax=10):
@@ -161,9 +199,12 @@ class Model:
             batch_gt = gt[splits[i]:splits[i+1]]
             batch_len = splits[i+1]-splits[i]
             batch_labels = self.one_hot_convert(np.reshape(batch_gt, -1).astype(int),2)
+            batch_pen_road = rs.get_one_hot_penalization(batch_gt)
+            
             # Run model on batch
             pred, loss = sess.run([self.preds, self.loss], 
-                               feed_dict={self.tf_data : batch_img, self.tf_labels : batch_labels, self.keep_prob : 1})
+                               feed_dict={self.tf_data : batch_img, self.tf_labels : batch_labels, 
+                                          self.tf_pen_road : batch_pen_road, self.keep_prob : 1})
             # Concatenate prediction and loss
             pred_tot = np.concatenate((pred_tot, pred), axis=0)
             loss_tot = np.concatenate((loss_tot, [loss]), axis=0)

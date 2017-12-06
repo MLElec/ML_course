@@ -3,6 +3,7 @@ import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from scipy.ndimage.morphology import distance_transform_cdt, binary_closing
 
 
 def load_train_set(dir_, data='images', label='groundtruth', ratio=0.8, seed=0):
@@ -101,18 +102,12 @@ def get_patches_label(y_batch):
 def get_useful_patches(patch_x, patch_y, min_threshold, max_threshold):
     """ From an array of [Num_patches x H x W x Num_channels] and its associated pixelwise labels,
     return patches with label mean > threshold"""
-
-    first_patch=True
-    for i in range(patch_x.shape[0]):
-        if np.mean(patch_y[i])>min_threshold and np.mean(patch_y[i])<max_threshold:
-            if first_patch:
-                useful_patches_x =  np.expand_dims(patch_x[i], axis=0)
-                useful_patches_y = np.expand_dims(patch_y[i],axis=0)
-                first_patch=False
-            else:
-                useful_patches_x = np.append(useful_patches_x, np.expand_dims(patch_x[i],axis=0), axis=0)
-                useful_patches_y = np.append(useful_patches_y, np.expand_dims(patch_y[i], axis=0), axis=0)
-
+    means = np.mean(patch_y, axis=(1,2))
+    id_keep = np.logical_and(means >= min_threshold, means <= max_threshold)
+    
+    useful_patches_x = patch_x[id_keep]
+    useful_patches_y = patch_y[id_keep]
+    
     return useful_patches_x, useful_patches_y
 
 
@@ -190,3 +185,30 @@ def patch_to_label(patch, foreground_threshold=0.25):
         return 1
     else:
         return 0
+    
+    
+def get_distance_map(ims):
+    ims_d = np.zeros(ims.shape)
+    for i in range(ims.shape[0]):
+        d = binary_closing(ims[i])
+        d = distance_transform_cdt(1-d)
+        ims_d[i] = d
+    return ims_d
+
+
+def get_penalize_values(ims, lambda_=0.3):
+    ims_f = get_distance_map(ims)
+    for i in range(ims_f.shape[0]):
+        max_d = np.max(ims_f[i])
+        T = lambda_*max_d
+        ims_f[i] = np.minimum(ims_f[i]/max_d, lambda_) # Threshold to lambda_
+        ims_f[i] = np.exp(-ims_f[i])
+    return ims_f
+
+
+def get_one_hot_penalization(imgs_val):
+    dist_maps = get_penalize_values(imgs_val)
+    dist_maps = np.reshape(dist_maps, [-1])
+    pen = np.ones((len(dist_maps), 2))
+    pen[:, 0] = dist_maps
+    return pen
