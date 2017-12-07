@@ -16,6 +16,10 @@ class Model:
         self.n_filters = n_filters
         self.kernel_size = kernel_size
         
+        # Path
+        self.save_path_model = None
+        self.save_path_stats = None
+        
         self.build_model(display_log)
         
         
@@ -44,57 +48,44 @@ class Model:
                                  kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
 
         pool2 = tf.contrib.layers.max_pool2d(inputs=self.conv2, kernel_size=2, stride=2)
-        
-        self.conv3 =tf.nn.dropout(tf.layers.conv2d(inputs=pool2, filters=self.n_filters*4, kernel_size=self.kernel_size, 
-                                              kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME'),
-                             self.keep_prob) 
-        # self.conv3 =tf.layers.conv2d(inputs=pool2, filters=self.n_filters*4, kernel_size=self.kernel_size, 
-        #                             kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
+
+        self.conv3 =tf.layers.conv2d(inputs=pool2, filters=self.n_filters*4, kernel_size=self.kernel_size, 
+                                    kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
                                   
 
         pool3 = tf.contrib.layers.max_pool2d(inputs=self.conv3, kernel_size=2, stride=2)
 
-        self.conv4 = tf.nn.dropout(tf.layers.conv2d(inputs=pool3, filters=self.n_filters*4, kernel_size=self.kernel_size, 
-                                               kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME'),
-                              self.keep_prob)
-        
-        # self.conv4 = tf.layers.conv2d(inputs=pool3, filters=self.n_filters*4, kernel_size=self.kernel_size, 
-        #                              kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
+        self.conv4 = tf.layers.conv2d(inputs=pool3, filters=self.n_filters*4, kernel_size=self.kernel_size, 
+                                      kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
         
         pool4 = tf.contrib.layers.max_pool2d(inputs=self.conv4, kernel_size=2, stride=2)
 
-        self.deconv1 = tf.nn.dropout(tf.layers.conv2d_transpose(inputs=pool4, filters=self.n_filters*4, kernel_size=4, strides=2,
-                                                           kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, 
-                                                           padding='SAME'), self.keep_prob)
-        # self.deconv1 = tf.layers.conv2d_transpose(inputs=pool4, filters=self.n_filters*4, kernel_size=4, strides=2,
-        #                                          kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
+        self.deconv1 = tf.layers.conv2d_transpose(inputs=pool4, filters=self.n_filters*4, kernel_size=4, strides=2,
+                                                 kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
+   
+        # deconv1_c = tf.concat([self.deconv1, self.conv4], axis=3)
+        # deconv1_c = 0.5*tf.add(self.deconv1, self.conv4)
 
-        # deconv2_c = tf.concat([self.deconv1, self.conv3], axis=3)
+        self.deconv2 = tf.layers.conv2d_transpose(inputs=self.deconv1, filters=self.n_filters*4, kernel_size=4,
+                                                  strides=2, kernel_regularizer=regularizer, 
+                                                  activation=tf.nn.leaky_relu, padding='SAME')
         
-        deconv1_c = tf.concat([self.deconv1, self.conv4], axis=3)
-
-        self.deconv2 = tf.nn.dropout(tf.layers.conv2d_transpose(inputs=deconv1_c, filters=self.n_filters*4, kernel_size=4,
-                                                           strides=2, kernel_regularizer=regularizer, 
-                                                           activation=tf.nn.leaky_relu, padding='SAME'), 
-                                    self.keep_prob)
+        # deconv2_c = tf.concat([self.deconv2, self.conv3], axis=3)
+        # deconv2_c = 0.5*tf.add(self.deconv2, self.conv3)
         
-        deconv2_c = tf.concat([self.deconv2, self.conv3], axis=3)
-
-        #self.deconv2 = tf.layers.conv2d_transpose(inputs=self.deconv1, filters=self.n_filters*4, kernel_size=4,
-        #                                          strides=2, kernel_regularizer=regularizer, 
-        #                                          activation=tf.nn.leaky_relu, padding='SAME')
-        
-        self.deconv3 = tf.layers.conv2d_transpose(inputs=deconv2_c, filters=self.n_filters*2, kernel_size=4, strides=2, 
+        self.deconv3 = tf.layers.conv2d_transpose(inputs=self.deconv2, filters=self.n_filters*2, kernel_size=4, strides=2, 
                                              kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')        
         
-        deconv3_c = tf.concat([self.deconv3, self.conv2], axis=3)
+        # deconv3_c = tf.concat([self.deconv3, self.conv2], axis=3)
+        # deconv3_c = 0.5*tf.add(self.deconv3, self.conv2)
             
-        self.deconv4 = tf.layers.conv2d_transpose(inputs=deconv3_c, filters=self.n_filters, kernel_size=4, strides=2, 
+        self.deconv4 = tf.layers.conv2d_transpose(inputs=self.deconv3, filters=self.n_filters, kernel_size=4, strides=2, 
                                              kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
         
-        deconv4_c = tf.concat([self.deconv4, self.conv1], axis=3)
+        # deconv4_c = tf.concat([self.deconv4, self.conv1], axis=3)
+        # deconv4_c = 0.5*tf.add(self.deconv4, self.conv1)
 
-        self.score_layer = tf.layers.conv2d(inputs=deconv4_c, filters=2, kernel_size=1,kernel_regularizer=regularizer)
+        self.score_layer = tf.layers.conv2d(inputs=self.deconv4, filters=2, kernel_size=1,kernel_regularizer=regularizer)
         
         logits = tf.reshape(self.score_layer, (-1,2))
         #y = tf.nn.softmax(logits)
@@ -120,13 +111,13 @@ class Model:
             print("conv4 size", self.conv4.shape)
             print("pool4 size", pool4.shape)
             print("deconv1 size", self.deconv1.shape)
-            print("deconv1_c size", deconv1_c.shape)
+            #print("deconv1_c size", deconv1_c.shape)
             print("deconv2 size", self.deconv2.shape)
-            print("deconv2_c size", deconv2_c.shape)
+            #print("deconv2_c size", deconv2_c.shape)
             print("deconv3 size", self.deconv3.shape)
-            print("deconv3_c size", deconv3_c.shape)
+            #print("deconv3_c size", deconv3_c.shape)
             print("deconv4 size", self.deconv4.shape) 
-            print("deconv4_c size", deconv4_c.shape)
+            #print("deconv4_c size", deconv4_c.shape)
             print("score size", self.score_layer.shape)
         
         
@@ -165,19 +156,20 @@ class Model:
                     loss_val, f1_val = self.predict_model_cgt(sess, val_imgs, val_gt, nmax=nmax)
 
                     print("Recap epoch ", epoch)
-                    print("\t last minibatch, cross entropy : ", train_cross_entropy, "reg term : ", train_reg_term)
+                    print("\t last minibatch, loss : ", batch_loss, "cross entropy : ", train_cross_entropy, 
+                          "reg term : ", train_reg_term)
                     print("\t val_loss : ", loss_val, ", train_loss : ", loss_train)
                     print("\t val f1 : ", f1_val, ", train f1 : ", f1_train)
                     loss_time = np.concatenate((loss_time, [[loss_train, loss_val]]), axis=0)
-                    f1_time = np.concatenate((loss_time, [[f1_train, f1_val]]), axis=0)
+                    f1_time = np.concatenate((f1_time, [[f1_train, f1_val]]), axis=0)
 
-                if epoch == 40:
-                    learning_rate_val = 5e-2*learning_rate_val
+                if epoch == 60:
+                    learning_rate_val = 1e-1*learning_rate_val
 
             # Save tensorflow variables
             str_date = datetime.datetime.now().strftime("%Y_%m_%d_%Hh%M")
             self.save_path_model =  os.path.join(path_models, str_date + '_model.ckpt')
-            saver.save(sess, self.save_path)
+            saver.save(sess, self.save_path_model)
             print("Model saved in file: %s" % self.save_path_model)
             
             # Save train and val f1 score / loss evolution
@@ -307,3 +299,32 @@ class Model:
             im_layer = layers[key].mean(axis=3).squeeze()
             # Normalize in rnage [-1, 1] for viz coherence
             plt.imshow(im_layer/np.max(np.abs(im_layer)), cmap='viridis', vmin=-1, vmax=1); plt.title(key); plt.axis('off')
+            
+            
+    def plot_stats(self, _file=None):
+        
+        if _file is not None:
+            pass
+        elif self.save_path_stats is not None:
+            _file = self.save_path_stats
+        else:
+            print('No model path found')
+            return
+        
+        r = np.load(_file)[()]
+        plt.figure(figsize=(16,5))
+        plt.suptitle('Statitics: {}'.format(_file))
+        plt.subplot(1,2,1)
+        plt.plot(np.arange(len(r['f1'])), r['f1'][:,0] ,'-g', label='train F1')
+        plt.plot(np.arange(len(r['f1'])), r['f1'][:,1] ,'-b', label='vlaidation F1')
+        plt.xlabel('Epochs')
+        plt.ylabel('F1')
+        plt.grid()
+        plt.legend()
+        plt.subplot(1,2,2)
+        plt.plot(np.arange(len(r['loss'])), r['loss'][:,0] ,'-g', label='train loss')
+        plt.plot(np.arange(len(r['loss'])), r['loss'][:,1] ,'-b', label='vlaidation loss')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.grid()
+        plt.legend()
