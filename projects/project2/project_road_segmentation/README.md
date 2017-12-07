@@ -18,3 +18,27 @@ The notebook shows how to use `scikit learn` to generate features from each pixe
 
 Evaluation Metric:
  [https://www.kaggle.com/wiki/MeanFScore]
+
+
+## Jupyter on cluster
+
+Connect to cluster using ssh command. Replace [username] with your github username and [ip] with cluster IP (35.195.6.119)
+```
+ssh -i ~/.ssh/id_rsa username@ip
+``
+
+On the cluster run
+```
+sudo su
+cd ../ML_course/projects/project2/project_road_segmentation/
+export PATH=/home/patryk_oleniuk/miniconda3/bin/:$PATH
+source activate my-amazing-working-gpu
+jupyter notebook --allow-root
+```
+
+On ou local machine connect to http://[EXTERNAL_IP_ADDRESS]:8888 (same IP as connection one, e.g. http://35.195.6.119:8888). Fill the token with the one one your terminal:
+```
+Copy/paste this URL into your browser when you connect for the first time,
+    to login with a token:
+        http://localhost:8888/?token=[TOKEN_HERE]
+```
