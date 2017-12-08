@@ -25,7 +25,7 @@ Evaluation Metric:
 Connect to cluster using ssh command. Replace [username] with your github username and [ip] with cluster IP (35.195.6.119)
 ```
 ssh -i ~/.ssh/id_rsa username@ip
-``
+```
 
 On the cluster run
 ```
