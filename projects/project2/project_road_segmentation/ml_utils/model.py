@@ -6,10 +6,11 @@ import os
 from collections import OrderedDict
 import matplotlib.pyplot as plt
 import ml_utils.road_seg as rs
+import time
 
 class Model:
     
-    def __init__(self, reg = 1e-3, n_filters = 64, kernel_size=3, display_log=True):
+    def __init__(self, reg = 1e-2, n_filters = 64, kernel_size=3, display_log=True):
                 
         # Settings model
         self.reg = reg
@@ -49,26 +50,30 @@ class Model:
 
         pool2 = tf.contrib.layers.max_pool2d(inputs=self.conv2, kernel_size=2, stride=2)
 
-        self.conv3 =tf.layers.conv2d(inputs=pool2, filters=self.n_filters*4, kernel_size=self.kernel_size, 
-                                    kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
+        self.conv3 = tf.nn.dropout(tf.layers.conv2d(inputs=pool2, filters=self.n_filters*4, kernel_size=self.kernel_size, 
+                                    kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME'), 
+                                   self.keep_prob)
                                   
 
         pool3 = tf.contrib.layers.max_pool2d(inputs=self.conv3, kernel_size=2, stride=2)
 
-        self.conv4 = tf.layers.conv2d(inputs=pool3, filters=self.n_filters*4, kernel_size=self.kernel_size, 
-                                      kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
+        self.conv4 = tf.nn.dropout(tf.layers.conv2d(inputs=pool3, filters=self.n_filters*4, kernel_size=self.kernel_size, 
+                                      kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME'), 
+                                   self.keep_prob)
         
         pool4 = tf.contrib.layers.max_pool2d(inputs=self.conv4, kernel_size=2, stride=2)
 
-        self.deconv1 = tf.layers.conv2d_transpose(inputs=pool4, filters=self.n_filters*4, kernel_size=4, strides=2,
-                                                 kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
+        self.deconv1 = tf.nn.dropout(tf.layers.conv2d_transpose(inputs=pool4, filters=self.n_filters*8, kernel_size=4, strides=2,
+                                                 kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME'),
+                                     self.keep_prob)
    
         # deconv1_c = tf.concat([self.deconv1, self.conv4], axis=3)
         # deconv1_c = 0.5*tf.add(self.deconv1, self.conv4)
 
-        self.deconv2 = tf.layers.conv2d_transpose(inputs=self.deconv1, filters=self.n_filters*4, kernel_size=4,
+        self.deconv2 = tf.nn.dropout(tf.layers.conv2d_transpose(inputs=self.deconv1, filters=self.n_filters*4, kernel_size=4,
                                                   strides=2, kernel_regularizer=regularizer, 
-                                                  activation=tf.nn.leaky_relu, padding='SAME')
+                                                  activation=tf.nn.leaky_relu, padding='SAME'), 
+                                     self.keep_prob)
         
         # deconv2_c = tf.concat([self.deconv2, self.conv3], axis=3)
         # deconv2_c = 0.5*tf.add(self.deconv2, self.conv3)
@@ -136,7 +141,8 @@ class Model:
 
             for epoch in range(1, n_epoch+1):
                 indices = np.random.permutation(useful_lab_tr.shape[0])
-
+                start_epoch = time.time()
+                
                 for batch_iter in range(int(np.ceil(useful_lab_tr.shape[0]/batch_size))):
 
                     batch_idx = indices[batch_iter*batch_size:min((batch_iter+1)*batch_size, indices.shape[0])]
@@ -147,15 +153,15 @@ class Model:
                     _, batch_loss, train_cross_entropy, train_reg_term = sess.run(
                         [self.train_step, self.loss, self.cross_entropy, self.reg_term], # Returns
                         feed_dict={self.tf_data : batch_x, self.tf_labels : batch_y, # Feed variables
-                                   self.keep_prob : 0.8, self.tf_pen_road : batch_pen_road,
+                                   self.keep_prob : 1, self.tf_pen_road : batch_pen_road,
                                    self.learning_rate : learning_rate_val})
 
-                if epoch % 1 == 0:
+                if epoch % 10 == 0:
 
                     loss_train, f1_train = self.predict_model_cgt(sess, train_imgs, train_gt, nmax=nmax)
                     loss_val, f1_val = self.predict_model_cgt(sess, val_imgs, val_gt, nmax=nmax)
 
-                    print("Recap epoch ", epoch)
+                    print("Recap epoch {} is {:.4f}s".format(epoch , time.time() - start_epoch))
                     print("\t last minibatch, loss : ", batch_loss, "cross entropy : ", train_cross_entropy, 
                           "reg term : ", train_reg_term)
                     print("\t val_loss : ", loss_val, ", train_loss : ", loss_train)
@@ -163,7 +169,7 @@ class Model:
                     loss_time = np.concatenate((loss_time, [[loss_train, loss_val]]), axis=0)
                     f1_time = np.concatenate((f1_time, [[f1_train, f1_val]]), axis=0)
 
-                if epoch == 60:
+                if epoch == 180:
                     learning_rate_val = 1e-1*learning_rate_val
 
             # Save tensorflow variables
