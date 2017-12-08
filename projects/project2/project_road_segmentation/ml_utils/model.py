@@ -10,7 +10,7 @@ import time
 
 class Model:
     
-    def __init__(self, reg = 1e-2, n_filters = 64, kernel_size=3, display_log=True):
+    def __init__(self, reg = 1e-2, n_filters = 64, kernel_size=3, display_log=True, path_models='model'):
                 
         # Settings model
         self.reg = reg
@@ -20,6 +20,10 @@ class Model:
         # Path
         self.save_path_model = None
         self.save_path_stats = None
+        self.path_models = path_models
+        
+        if not os.path.exists(path_models):
+            os.mkdir(path_models)
         
         self.build_model(display_log)
         
@@ -57,7 +61,7 @@ class Model:
 
         pool3 = tf.contrib.layers.max_pool2d(inputs=self.conv3, kernel_size=2, stride=2)
 
-        self.conv4 = tf.nn.dropout(tf.layers.conv2d(inputs=pool3, filters=self.n_filters*4, kernel_size=self.kernel_size, 
+        self.conv4 = tf.nn.dropout(tf.layers.conv2d(inputs=pool3, filters=self.n_filters*8, kernel_size=self.kernel_size, 
                                       kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME'), 
                                    self.keep_prob)
         
@@ -127,7 +131,7 @@ class Model:
         
         
     def train_model(self, useful_patches_tr, useful_lab_tr, train_imgs, train_gt, val_imgs, val_gt, 
-                    n_epoch = 4, batch_size = 5, learning_rate_val = 5e-4, path_models='model', nmax=10, seed=0):
+                    n_epoch = 4, batch_size = 5, learning_rate_val = 5e-4, nmax=10, seed=0, display_epoch=10):
         
         init = tf.global_variables_initializer()
         saver = tf.train.Saver()
@@ -156,7 +160,7 @@ class Model:
                                    self.keep_prob : 1, self.tf_pen_road : batch_pen_road,
                                    self.learning_rate : learning_rate_val})
 
-                if epoch % 10 == 0:
+                if epoch % display_epoch == 0:
 
                     loss_train, f1_train = self.predict_model_cgt(sess, train_imgs, train_gt, nmax=nmax)
                     loss_val, f1_val = self.predict_model_cgt(sess, val_imgs, val_gt, nmax=nmax)
@@ -174,12 +178,12 @@ class Model:
 
             # Save tensorflow variables
             str_date = datetime.datetime.now().strftime("%Y_%m_%d_%Hh%M")
-            self.save_path_model =  os.path.join(path_models, str_date + '_model.ckpt')
+            self.save_path_model =  os.path.join(self.path_models, str_date + '_model.ckpt')
             saver.save(sess, self.save_path_model)
             print("Model saved in file: %s" % self.save_path_model)
             
             # Save train and val f1 score / loss evolution
-            self.save_path_stats =  os.path.join(path_models, str_date + '_stats.npy')
+            self.save_path_stats =  os.path.join(self.path_models, str_date + '_stats.npy')
             np.save(self.save_path_stats, {'loss': loss_time, 'f1': f1_time})
             print("Stats saved to file: %s" % self.save_path_stats)
 

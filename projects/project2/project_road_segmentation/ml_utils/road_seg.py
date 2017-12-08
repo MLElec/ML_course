@@ -22,7 +22,7 @@ def extract_from_path(path, is_label=False):
         
     return x_data
     
-def load_train_set(dir_, data='images', label='groundtruth', train_sub='aug_train', val_sub='aug_val', ratio=0.8, seed=0):
+def load_train_set(dir_, data='images', label='groundtruth', train_sub='aug_train', val_sub='aug_val'):
         
     path_train_img = os.path.join(dir_, data, train_sub)
     path_train_label = os.path.join(dir_, label, train_sub)
