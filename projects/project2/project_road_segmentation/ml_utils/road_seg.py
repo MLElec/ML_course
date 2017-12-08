@@ -4,33 +4,41 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from scipy.ndimage.morphology import distance_transform_cdt, binary_closing
+import Augmentor as ag
 
-
-def load_train_set(dir_, data='images', label='groundtruth', ratio=0.8, seed=0):
-    np.random.seed(seed)
-    # Define path to data
-    path_data = os.path.join(dir_, data)
-    path_label = os.path.join(dir_, label)
-    # Load train data files and sort them according to satImage_xxx.png where xxx is the id number
-    files_data = np.array(os.listdir(path_label))
+    
+def extract_from_path(path, is_label=False):
+    files_data = np.array( [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))] )
     id_sort = np.argsort([ int(filename[9:12]) for filename in files_data])
     files_data = files_data[id_sort]
-    # Check first image to check the size (different for data and label)
-    shape_train = mpimg.imread(os.path.join(path_data, files_data[0])).shape
-    shape_label = mpimg.imread(os.path.join(path_label, files_data[0])).shape
-    # Create empty matrices and load images (data and label)
-    x_data = np.zeros((len(files_data),) + shape_train)
-    y_label = np.zeros((len(files_data),) + shape_label)
-    for i, file in enumerate(files_data):
-        x_data[i] = mpimg.imread(os.path.join(path_data, file))
-        y_label[i] = np.round(mpimg.imread(os.path.join(path_label, file)))
-        
-    # Id split for Valisation and test
-    ids = np.random.permutation(x_data.shape[0])
-    id_train = ids[:int(x_data.shape[0]*ratio)]
-    id_valid = ids[int(x_data.shape[0]*ratio):]
     
-    return x_data[id_train], y_label[id_train], x_data[id_valid], y_label[id_valid], id_train, id_valid
+    shape_img = mpimg.imread(os.path.join(path, files_data[0])).shape
+    x_data = np.zeros((len(files_data),) + shape_img)
+    for i, file_ in enumerate(files_data):
+        if is_label:
+            x_data[i] = np.round(mpimg.imread(os.path.join(path, file_)))
+        else:
+            x_data[i] = mpimg.imread(os.path.join(path, file_))
+        
+    return x_data
+    
+def load_train_set(dir_, data='images', label='groundtruth', train_sub='aug_train', val_sub='aug_val', ratio=0.8, seed=0):
+        
+    path_train_img = os.path.join(dir_, data, train_sub)
+    path_train_label = os.path.join(dir_, label, train_sub)
+    path_val_img = os.path.join(dir_, data, val_sub)
+    path_val_label = os.path.join(dir_, label, val_sub)
+    
+    print('Loading train images ...')
+    x_train_data = extract_from_path(path_train_img)
+    print('Loading train labels ...')
+    y_train_label = extract_from_path(path_train_label, True)
+    print('Loading validation images ...')
+    x_val_data = extract_from_path(path_val_img)
+    print('Loading validation labels ...')
+    y_val_label = extract_from_path(path_val_label, True)
+    
+    return x_train_data, y_train_label, x_val_data, y_val_label
 
 def load_test_set(path_data='data/test_set_images'):
     # Look for all file sin subfolder, store filename and path to filename (each test file is in a separate folder)

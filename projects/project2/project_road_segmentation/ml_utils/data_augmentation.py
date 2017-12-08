@@ -9,15 +9,62 @@ from os import rename
 from PIL import Image
 
 
-
-def _create_augmented_features(path_images, path_output='output', n_aug=400, max_roatations=25, prob=0.3, seed=0):
-
-    if os.path.exists(os.path.join(path_images, path_output)):
-        shutil.rmtree(os.path.join(path_images, path_output))
+def genererate_data(path_train_dir, path_image='images', path_gt='groundtruth', ratio=0.8, n_aug=400):
     
+    # Generate output folders and copy data to them
+    print('\nSplit train set train/validation ...')
+    file_train, file_val = _get_ids_train_val(os.path.join(path_train_dir, path_image), ratio)
+    
+    # Copy file to repective folders
+    print('\nCopy to sub folders ...')
+    path_train_gen, path_val_gen = _copy_data(os.path.join(path_train_dir, path_image), file_train, file_val)
+    path_train_gen, path_val_gen = _copy_data(os.path.join(path_train_dir, path_gt), file_train, file_val)
+    
+    # Generate augmented features
+    print('\nGenerate augmented features - Train ...')
+    _create_augmented_features(os.path.join(path_train_dir, path_image, path_train_gen), n_aug=n_aug)
+    print('\nGenerate augmented features - Labels ...')
+    _create_augmented_features(os.path.join(path_train_dir, path_gt, path_train_gen), n_aug=n_aug)
+    
+def _get_ids_train_val(path, ratio=0.8):
+    
+    files_data = np.array( [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))] )
+    id_sort = np.argsort([ int(filename[9:12]) for filename in files_data])
+    files_data = files_data[id_sort]
+    
+        # Id split for Valisation and test
+    ids = np.random.permutation(files_data.shape[0])
+    id_train = ids[:int(files_data.shape[0]*ratio)]
+    id_valid = ids[int(files_data.shape[0]*ratio):]
+    
+    return files_data[id_train], files_data[id_valid]
+    
+def _copy_data(path_src, filenames_train, filenames_val, path_train='aug_train', path_val='aug_val'):
+    
+    path_dest_train = os.path.join(path_src, path_train)
+    path_dest_val = os.path.join(path_src, path_val)
+    
+    # Reset data is already exists
+    if os.path.exists(path_dest_train):
+        shutil.rmtree(path_dest_train)
+    if os.path.exists(path_dest_val):
+        shutil.rmtree(path_dest_val)
+      
+    # Make dir and copy files to new directory
+    os.mkdir(path_dest_train)
+    os.mkdir(path_dest_val)
+    for file_ in filenames_train:
+        shutil.copyfile(os.path.join(path_src, file_), os.path.join(path_dest_train, file_))
+    for file_ in filenames_val:
+        shutil.copyfile(os.path.join(path_src, file_), os.path.join(path_dest_val, file_))
+        
+    return path_train, path_val
+    
+def _create_augmented_features(path_images, path_output='', n_aug=10, max_roatations=25, prob=0.3, seed=0):
+  
     # Build pipeline and set input/output directories
+    p = ag.Pipeline(save_format='png')
     ag.Pipeline.set_seed(seed)
-    p = ag.Pipeline();
     p.add_further_directory(path_images, path_output)
     
     # Define transformations
@@ -26,76 +73,19 @@ def _create_augmented_features(path_images, path_output='output', n_aug=400, max
     p.rotate(probability=prob, max_left_rotation=max_roatations, max_right_rotation=max_roatations)
     
     # Generate samples
-    p.sample(n_aug)
+    _pipeline(p, n_aug)
 
+def _pipeline(pipe, n):
     
-def create_augmented_features(path_train, path_output='output', n_aug=400, max_roatations=25, prob=0.3, seed=0):
-    # Augment images
-    print('Generating augmented features - Images ...')
-    _create_augmented_features(os.path.join(path_train, 'images'), 
-                               path_output, n_aug, max_roatations, prob, seed)
-    # Augment groundtruth
-    print('Generating augmented features - Groundtruth ...')
-    _create_augmented_features(os.path.join(path_train, 'groundtruth'), 
-                               path_output, n_aug, max_roatations, prob, seed)
-    
+    sample_count = 1
+    while sample_count <= n:
+        for augmentor_image in pipe.augmentor_images:
+            if sample_count <= n:
+                img = pipe._execute(augmentor_image, save_to_disk=False)
 
-
-# returns modification date
-def modification_date(filename):
-    t = os.path.getmtime(filename)
-    return datetime.datetime.fromtimestamp(t)
-
-# sorts the file in modification time order and renames them in this way
-def rename_sort_files(prefix ,mypath):
-    onlyfiles = [f for f in listdir(mypath) if isfile(join(mypath, f))]
-    
-    # get the creation time
-    dates = {}
-    for file in onlyfiles:
-        dates[file] = modification_date(os.path.join(mypath,file))
-    
-    # rename according to the creation time
-    i=1
-    for filename, date in sorted(dates.items(), key=lambda item: (item[1], item[0])):
-        im = Image.open(os.path.join(mypath,filename))
-        im.convert('L') # convert to monochrome
-        print('Renaming '+ filename + ' to ' +  prefix+'{:03d}'.format(i) + '.png')
-        im.save(os.path.join(mypath,prefix +'{:03d}'.format(i) + '.png') )
-        os.remove(os.path.join(mypath,filename))
-        i += 1
-
-
-# cretaes rotated and flipped road data, saves it in an "output" folder
-def create_new_road_data(nr_new_data, path_labels, path_images, prefix_name='satImage_', prob =0.3 , seed=100):
-    # remove previous data from 'output' folder
-    
-    shutil.rmtree(path_labels + '/output')
-    shutil.rmtree(path_images + '/output')
-
-    # generate twice the same data (the same because of the same seed)
-    p = ag.Pipeline();
-    ag.Pipeline.set_seed(seed)
-    p.add_further_directory(path_images) # ensure you press enter after this, don't just c&p this code.
-    p.flip_left_right(probability=prob)
-    p.flip_top_bottom(probability=prob)
-    p.rotate(probability=prob, max_left_rotation=25, max_right_rotation=25)
-
-    # save the data
-    p.sample(nr_new_data)
-
-    p = ag.Pipeline();
-    ag.Pipeline.set_seed(seed)
-    p.add_further_directory(path_labels) # ensure you press enter after this, don't just c&p this code.
-
-    ag.Pipeline.set_seed(seed)
-    p.flip_left_right(probability=prob)
-    p.flip_top_bottom(probability=prob)
-    p.rotate(probability=prob, max_left_rotation=25, max_right_rotation=25)
-    # save the data
-    p.sample(nr_new_data)
-
-
-    # label the data the same way
-    rename_sort_files(prefix_name, path_labels +'/output');
-    rename_sort_files(prefix_name, path_images +'/output');
+                #if img.mode != "RGB":
+                #    img = img.convert("RGB")
+                
+                file_name = 'satImage_{:03d}'.format(100+sample_count) + '.' + pipe.save_format
+                img.save(os.path.join(augmentor_image.output_directory, file_name))
+            sample_count += 1
