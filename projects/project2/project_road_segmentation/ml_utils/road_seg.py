@@ -26,17 +26,22 @@ def load_train_set(dir_, data='images', label='groundtruth', train_sub='aug_trai
         
     path_train_img = os.path.join(dir_, data, train_sub)
     path_train_label = os.path.join(dir_, label, train_sub)
-    path_val_img = os.path.join(dir_, data, val_sub)
-    path_val_label = os.path.join(dir_, label, val_sub)
+    
     
     print('Loading train images ...')
     x_train_data = extract_from_path(path_train_img)
     print('Loading train labels ...')
     y_train_label = extract_from_path(path_train_label, True)
-    print('Loading validation images ...')
-    x_val_data = extract_from_path(path_val_img)
-    print('Loading validation labels ...')
-    y_val_label = extract_from_path(path_val_label, True)
+    if(val_sub != None):
+        path_val_img = os.path.join(dir_, data, val_sub)
+        path_val_label = os.path.join(dir_, label, val_sub)
+        print('Loading validation images ...')
+        x_val_data = extract_from_path(path_val_img)
+        print('Loading validation labels ...')
+        y_val_label = extract_from_path(path_val_label, True)
+    else:
+        x_val_data=None
+        y_val_label=None
     
     return x_train_data, y_train_label, x_val_data, y_val_label
 

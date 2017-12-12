@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.python.client import device_lib
 import datetime
 import numpy as np
 from sklearn.metrics import f1_score
@@ -7,6 +8,9 @@ from collections import OrderedDict
 import matplotlib.pyplot as plt
 import ml_utils.road_seg as rs
 import time
+from tqdm import tqdm_notebook
+
+from ml_utils.postprocessing import post_processing
 
 class Model:
     
@@ -107,7 +111,7 @@ class Model:
         self.reg_term = tf.contrib.layers.apply_regularization(regularizer, self.reg_variables)
         self.loss = self.reg_term + self.cross_entropy
 
-        self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss)
+        self.train_step = tf.train.AdamOptimizer(self.learning_rate, epsilon=1e-4).minimize(self.loss)
         self.preds = tf.argmax(logits,axis=1,output_type=tf.int32)
         
         if display_log:
@@ -136,14 +140,21 @@ class Model:
         init = tf.global_variables_initializer()
         saver = tf.train.Saver()
         
+        dev_list = device_lib.list_local_devices()
+
+        print('Computing devices: ')
+        for i in range(len(dev_list)): 
+            print(dev_list[i].name)
+        
         loss_time = np.empty((0, 2))
         f1_time = np.empty((0, 2))
+        f1_post_time = np.empty((0, 2))
 
-        with tf.Session() as sess:
+        with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as sess:
 
             sess.run(init)
 
-            for epoch in range(1, n_epoch+1):
+            for epoch in tqdm_notebook(range(1, n_epoch+1)):
                 indices = np.random.permutation(useful_lab_tr.shape[0])
                 start_epoch = time.time()
                 
@@ -162,16 +173,26 @@ class Model:
 
                 if epoch % display_epoch == 0:
 
-                    loss_train, f1_train = self.predict_model_cgt(sess, train_imgs, train_gt, nmax=nmax)
-                    loss_val, f1_val = self.predict_model_cgt(sess, val_imgs, val_gt, nmax=nmax)
+                    loss_train, f1_train, f1_post_train = self.predict_model_cgt(sess, train_imgs, train_gt, nmax=nmax)
 
                     print("Recap epoch {} is {:.4f}s".format(epoch , time.time() - start_epoch))
                     print("\t last minibatch, loss : ", batch_loss, "cross entropy : ", train_cross_entropy, 
                           "reg term : ", train_reg_term)
+                    
+                    if(val_imgs != None) and (val_gt != None):
+                        loss_val, f1_val, f1_post_val = self.predict_model_cgt(sess, val_imgs, val_gt, nmax=nmax)
+                        
+                    else:
+                        loss_val =0;
+                        f1_val = 0;
+                        f1_post_val =0
+                        
                     print("\t val_loss : ", loss_val, ", train_loss : ", loss_train)
                     print("\t val f1 : ", f1_val, ", train f1 : ", f1_train)
+                    print("\t val f1 postproc : ", f1_post_val, ", train f1 postproc : ", f1_post_train)
                     loss_time = np.concatenate((loss_time, [[loss_train, loss_val]]), axis=0)
                     f1_time = np.concatenate((f1_time, [[f1_train, f1_val]]), axis=0)
+                    f1_post_time = np.concatenate((f1_post_time, [[f1_post_train, f1_post_val]]), axis=0)
 
                 if epoch == 180:
                     learning_rate_val = 1e-1*learning_rate_val
@@ -184,11 +205,11 @@ class Model:
             
             # Save train and val f1 score / loss evolution
             self.save_path_stats =  os.path.join(self.path_models, str_date + '_stats.npy')
-            np.save(self.save_path_stats, {'loss': loss_time, 'f1': f1_time})
+            np.save(self.save_path_stats, {'loss': loss_time, 'f1': f1_time,'f1_post': f1_post_time})
             print("Stats saved to file: %s" % self.save_path_stats)
 
             
-    def predict_model_cgt(self, sess, imgs, gt, nmax=10):
+    def predict_model_cgt(self, sess, imgs, gt, nmax=10, min_size_postproc=400):
         imgs_size = gt.shape[0]
         splits = np.linspace(0, imgs_size, 1+imgs_size//nmax).astype(int)
 
@@ -212,8 +233,13 @@ class Model:
             loss_tot = np.concatenate((loss_tot, [loss]), axis=0)
 
         f1 = f1_score(np.reshape(gt, -1), np.reshape(pred_tot, -1), average='macro') 
+        
+        post_img = post_processing(np.reshape(pred_tot, [imgs_size, gt.shape[1], gt.shape[2]] ) , min_size_postproc)
+        
+        f1_post = f1_score(np.reshape(gt, -1), np.reshape(post_img, -1), average='macro') 
+        
         loss = np.mean(loss_tot)
-        return loss, f1
+        return loss, f1, f1_post
     
     
     def predict_model(self, sess, imgs, nmax=10):
@@ -326,14 +352,15 @@ class Model:
         plt.suptitle('Statitics: {}'.format(_file))
         plt.subplot(1,2,1)
         plt.plot(np.arange(len(r['f1'])), r['f1'][:,0] ,'-g', label='train F1')
-        plt.plot(np.arange(len(r['f1'])), r['f1'][:,1] ,'-b', label='vlaidation F1')
+        plt.plot(np.arange(len(r['f1'])), r['f1'][:,1] ,'-b', label='validation F1')
+        plt.plot(np.arange(len(r['f1_post'])), r['f1_post'][:,1] ,'-r', label='val. postproc F1 ')
         plt.xlabel('Epochs')
         plt.ylabel('F1')
         plt.grid()
         plt.legend()
         plt.subplot(1,2,2)
         plt.plot(np.arange(len(r['loss'])), r['loss'][:,0] ,'-g', label='train loss')
-        plt.plot(np.arange(len(r['loss'])), r['loss'][:,1] ,'-b', label='vlaidation loss')
+        plt.plot(np.arange(len(r['loss'])), r['loss'][:,1] ,'-b', label='validation loss')
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
         plt.grid()
