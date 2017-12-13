@@ -97,17 +97,17 @@ class Model:
         self.score_layer = tf.layers.conv2d(inputs=self.deconv4, filters=2, kernel_size=1,kernel_regularizer=regularizer)
         
         logits = tf.reshape(self.score_layer, (-1,2))
-        #y = tf.nn.softmax(logits)
+        y = tf.nn.softmax(logits)
         
-        #y_label = tf.multiply(tf.cast(self.tf_labels, tf.float32), self.tf_pen_road)
-        #self.cross_entropy = tf.reduce_mean(-tf.reduce_sum(tf.multiply(y_label, tf.log(y)), 1))
+        y_label = tf.multiply(tf.cast(self.tf_labels, tf.float32), self.tf_pen_road)
+        self.cross_entropy = tf.reduce_mean(-tf.reduce_sum(tf.multiply(y_label, tf.log(y)), 1))
 
-        self.cross_entropy = tf.losses.softmax_cross_entropy(onehot_labels=self.tf_labels, logits=logits, weights=weights)
+        # self.cross_entropy = tf.losses.softmax_cross_entropy(onehot_labels=self.tf_labels, logits=logits, weights=weights)
         self.reg_variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
         self.reg_term = tf.contrib.layers.apply_regularization(regularizer, self.reg_variables)
         self.loss = self.reg_term + self.cross_entropy
 
-        self.train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss)
+        self.train_step = tf.train.AdamOptimizer(self.learning_rate, epsilon=1e-4).minimize(self.loss)
         self.preds = tf.argmax(logits,axis=1,output_type=tf.int32)
         
         if display_log:
@@ -131,10 +131,11 @@ class Model:
         
         
     def train_model(self, useful_patches_tr, useful_lab_tr, train_imgs, train_gt, val_imgs, val_gt, 
-                    n_epoch = 4, batch_size = 5, learning_rate_val = 5e-4, nmax=10, seed=0, display_epoch=10):
+                    n_epoch = 4, batch_size = 5, learning_rate_val = 1e-3, nmax=10, seed=0, display_epoch=10):
         
         init = tf.global_variables_initializer()
         saver = tf.train.Saver()
+        np.random.seed(seed)
         
         loss_time = np.empty((0, 2))
         f1_time = np.empty((0, 2))
@@ -161,6 +162,8 @@ class Model:
                                    self.learning_rate : learning_rate_val})
 
                 if epoch % display_epoch == 0:
+                    
+                    # print("Recap training batch is {:.4f}s".format(time.time() - start_epoch))
 
                     loss_train, f1_train = self.predict_model_cgt(sess, train_imgs, train_gt, nmax=nmax)
                     loss_val, f1_val = self.predict_model_cgt(sess, val_imgs, val_gt, nmax=nmax)
@@ -173,7 +176,7 @@ class Model:
                     loss_time = np.concatenate((loss_time, [[loss_train, loss_val]]), axis=0)
                     f1_time = np.concatenate((f1_time, [[f1_train, f1_val]]), axis=0)
 
-                if epoch == 180:
+                if epoch == 30:
                     learning_rate_val = 1e-1*learning_rate_val
 
             # Save tensorflow variables

@@ -144,7 +144,8 @@ def display_predictions(y_pred, img_ref, img_cgt=None, n_display=3):
         return
     
     im_pred = np.reshape(y_pred, img_ref.shape[:3]).astype(np.float32)
-    id_display = np.random.permutation(len(img_ref))[:n_display]
+    # id_display = np.random.permutation(len(img_ref))[:n_display]
+    id_display = np.arange(n_display)
         
     plt.figure(figsize=(16, 5*n_display))
     for i in range(n_display):
@@ -162,7 +163,9 @@ def display_predictions_nocgt(y_pred, img_ref, n_display=3):
         im_pred = np.reshape(y_pred, img_ref.shape[:3]).astype(np.float32)
     else:
         im_pred = y_pred
-    id_display = np.random.permutation(len(img_ref))[:n_display]
+    
+    # id_display = np.random.permutation(len(img_ref))[:n_display]
+    id_display = np.arange(n_display)
         
     plt.figure(figsize=(10, 5*n_display))
     for i in range(n_display):

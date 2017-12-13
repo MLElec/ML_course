@@ -26,8 +26,9 @@ def genererate_data(path_train_dir, path_image='images', path_gt='groundtruth', 
     print('\nGenerate augmented features - Labels ...')
     _create_augmented_features(os.path.join(path_train_dir, path_gt, path_train_gen), n_aug=n_aug)
     
-def _get_ids_train_val(path, ratio=0.8):
+def _get_ids_train_val(path, ratio=0.8, seed=2):
     
+    np.random.seed(seed)
     files_data = np.array( [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))] )
     id_sort = np.argsort([ int(filename[9:12]) for filename in files_data])
     files_data = files_data[id_sort]
