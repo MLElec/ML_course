@@ -7,10 +7,12 @@ from collections import OrderedDict
 import matplotlib.pyplot as plt
 import ml_utils.road_seg as rs
 import time
+from groupy.gconv.tensorflow_gconv.splitgconv2d import gconv2d, gconv2d_util
 
 class Model:
     
-    def __init__(self, reg = 1e-2, n_filters = 64, kernel_size=3, display_log=True, path_models='model'):
+    def __init__(self, reg = 1e-2, n_filters = 64, kernel_size=3, display_log=True, 
+                 path_models='model', model_type='cnn'):
                 
         # Settings model
         self.reg = reg
@@ -25,8 +27,113 @@ class Model:
         if not os.path.exists(path_models):
             os.mkdir(path_models)
         
-        self.build_model(display_log)
+        if model_type == 'gcnn':
+            self.build_model_gcnn(display_log)
+        else:
+            self.build_model(display_log)
         
+    def build_model_gcnn(self, display_log, seed=0):
+        
+        tf.reset_default_graph()
+        tf.set_random_seed(seed)
+
+        # Plae holders
+        self.learning_rate = tf.placeholder(tf.float32)
+        self.tf_data = tf.placeholder(tf.float32,[None, None, None, 3])
+        self.tf_labels = tf.placeholder(tf.int32,[None,2])
+        self.keep_prob = tf.placeholder(tf.float32)
+        self.tf_pen_road = tf.placeholder(tf.float32,[None,2])
+        
+        regularizer = tf.contrib.layers.l2_regularizer(scale=self.reg)
+        class_weights = tf.constant([[1.0,1.0]]) 
+        weights = tf.reduce_sum(class_weights * tf.cast(self.tf_labels, tf.float32), axis=1)
+        
+        self.conv1 = self._gcnn_layer(inputs=self.tf_data, in_filters=3, out_filters=self.n_filters,
+                                      kernel_size=self.kernel_size, h_in='Z2', h_out='D4')
+        
+        pool1 = tf.contrib.layers.max_pool2d(inputs=self.conv1, kernel_size=2, stride=2)
+        
+        self.conv2 = self._gcnn_layer(inputs=pool1, in_filters=self.n_filters, out_filters=2*self.n_filters,
+                                      kernel_size=self.kernel_size, h_in='D4', h_out='D4')
+        
+        pool2 = tf.contrib.layers.max_pool2d(inputs=self.conv2, kernel_size=2, stride=2)
+
+        self.conv3 = self._gcnn_layer(inputs=pool2, in_filters=2*self.n_filters, out_filters=4*self.n_filters,
+                                      kernel_size=self.kernel_size, h_in='D4', h_out='D4')
+
+        pool3 = tf.contrib.layers.max_pool2d(inputs=self.conv3, kernel_size=2, stride=2)
+        
+        self.conv4 = self._gcnn_layer(inputs=pool3, in_filters=4*self.n_filters, out_filters=8*self.n_filters,
+                                      kernel_size=self.kernel_size, h_in='D4', h_out='D4')
+            
+        pool4 = tf.contrib.layers.max_pool2d(inputs=self.conv4, kernel_size=2, stride=2)
+        
+        self.deconv1 = tf.nn.dropout(tf.layers.conv2d_transpose(inputs=pool4, filters=self.n_filters*64, kernel_size=4, strides=2,
+                                                 kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME'),
+                                     self.keep_prob)
+
+        self.deconv2 = tf.nn.dropout(tf.layers.conv2d_transpose(inputs=self.deconv1, filters=self.n_filters*32, kernel_size=4,
+                                                  strides=2, kernel_regularizer=regularizer, 
+                                                  activation=tf.nn.leaky_relu, padding='SAME'), 
+                                     self.keep_prob)
+        
+        self.deconv3 = tf.layers.conv2d_transpose(inputs=self.deconv2, filters=self.n_filters*16, kernel_size=4, strides=2, 
+                                             kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')        
+
+            
+        self.deconv4 = tf.layers.conv2d_transpose(inputs=self.deconv3, filters=self.n_filters*8, kernel_size=4, strides=2, 
+                                             kernel_regularizer=regularizer, activation=tf.nn.leaky_relu, padding='SAME')
+        
+   
+        self.score_layer = tf.layers.conv2d(inputs=self.deconv4, filters=2, kernel_size=1,kernel_regularizer=regularizer)
+        
+        logits = tf.reshape(self.score_layer, (-1,2))
+        y = tf.nn.softmax(logits)
+        
+        y_label = tf.multiply(tf.cast(self.tf_labels, tf.float32), self.tf_pen_road)
+        self.cross_entropy = tf.reduce_mean(-tf.reduce_sum(tf.multiply(y_label, tf.log(y)), 1))
+
+        # self.cross_entropy = tf.losses.softmax_cross_entropy(onehot_labels=self.tf_labels, logits=logits, weights=weights)
+        self.reg_variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+        self.reg_term = tf.contrib.layers.apply_regularization(regularizer, self.reg_variables)
+        self.loss = self.reg_term + self.cross_entropy
+
+        self.train_step = tf.train.AdamOptimizer(self.learning_rate, epsilon=1e-4).minimize(self.loss)
+        self.preds = tf.argmax(logits,axis=1,output_type=tf.int32)
+        
+        if display_log:
+            print("conv1 size", self.conv1.shape)
+            print("pool1 size", pool1.shape)
+            print("conv2 size", self.conv2.shape)    
+            print("pool2 size", pool2.shape)
+            print("conv3 size", self.conv3.shape)
+            print("pool3 size", pool3.shape)
+            print("conv4 size", self.conv4.shape)
+            print("pool4 size", pool4.shape)
+            print("deconv1 size", self.deconv1.shape)
+            print("deconv2 size", self.deconv2.shape)
+            print("deconv3 size", self.deconv3.shape)
+            print("deconv4 size", self.deconv4.shape) 
+            print("score size", self.score_layer.shape)
+
+            
+    def _gcnn_layer(self, inputs, in_filters=3, out_filters=64, kernel_size=3, strides=1, h_in='Z2', h_out='D4'):
+
+        # G-CNN settings
+        gconv_indices, gconv_shape_info, w_shape = gconv2d_util(
+            h_input=h_in, h_output=h_out, 
+            in_channels=in_filters, out_channels=out_filters, ksize=kernel_size)
+
+        # Perform group equi. convolution and add bias
+        w = tf.Variable(tf.truncated_normal(w_shape, stddev=1.))
+        y = gconv2d(input=inputs, filter=w, strides=[1, strides, strides, 1], padding='SAME', 
+                    gconv_indices=gconv_indices, gconv_shape_info=gconv_shape_info)
+        biases = tf.Variable(tf.zeros([y.shape[-1]]))
+        y = y + biases
+        
+        # Activation function
+        y = tf.nn.leaky_relu(y)
+        return y
         
     def build_model(self, display_log, seed=0):
         
