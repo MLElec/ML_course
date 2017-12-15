@@ -9,22 +9,61 @@ from os import rename
 from PIL import Image
 
 
-def genererate_data(path_train_dir, path_image='images', path_gt='groundtruth', ratio=0.8, n_aug=400):
+def genererate_data_from_id(file_train, file_val, path_train_dir, path_image='images', 
+                            path_gt='groundtruth', n_aug=400, seed=0, display_log=True):
     
-    # Generate output folders and copy data to them
-    print('\nSplit train set train/validation ...')
-    file_train, file_val = _get_ids_train_val(os.path.join(path_train_dir, path_image), ratio)
-    
-    # Copy file to repective folders
-    print('\nCopy to sub folders ...')
+        # Copy file to repective folders
+    if display_log:
+        print('\nCopy to sub folders ...')
     path_train_gen, path_val_gen = _copy_data(os.path.join(path_train_dir, path_image), file_train, file_val)
     path_train_gen, path_val_gen = _copy_data(os.path.join(path_train_dir, path_gt), file_train, file_val)
     
     # Generate augmented features
-    print('\nGenerate augmented features - Train ...')
-    _create_augmented_features(os.path.join(path_train_dir, path_image, path_train_gen), n_aug=n_aug)
-    print('\nGenerate augmented features - Labels ...')
-    _create_augmented_features(os.path.join(path_train_dir, path_gt, path_train_gen), n_aug=n_aug)
+    if display_log:
+        print('\nGenerate augmented features - + {} Train ...'.format(n_aug))
+    _create_augmented_features(os.path.join(path_train_dir, path_image, path_train_gen), seed=seed, n_aug=n_aug)
+    if display_log:
+        print('\nGenerate augmented features - + {} Labels ...'.format(n_aug))
+    _create_augmented_features(os.path.join(path_train_dir, path_gt, path_train_gen), seed=seed, n_aug=n_aug)
+
+    if display_log:
+        print('\nRemove augmentation source images from train ...')
+    _remove_ids(file_train, os.path.join(path_train_dir, path_image, path_train_gen))
+    _remove_ids(file_train, os.path.join(path_train_dir, path_gt, path_train_gen))
+
+def genererate_data(path_train_dir, path_image='images', path_gt='groundtruth', ratio=0.8, n_aug=400, seed=0, display_log=True):
+    
+    # Generate output folders and copy data to them
+    if display_log:
+        print('\nSplit train set train/validation ...')
+    file_train, file_val = _get_ids_train_val(os.path.join(path_train_dir, path_image), ratio)
+    
+    # Copy file to repective folders
+    if display_log:
+        print('\nCopy to sub folders ...')
+    path_train_gen, path_val_gen = _copy_data(os.path.join(path_train_dir, path_image), file_train, file_val)
+    path_train_gen, path_val_gen = _copy_data(os.path.join(path_train_dir, path_gt), file_train, file_val)
+    
+    # Generate augmented features
+    if display_log:
+        print('\nGenerate augmented features - Train ...')
+    _create_augmented_features(os.path.join(path_train_dir, path_image, path_train_gen), n_aug=n_aug, seed=seed)
+    if display_log:
+        print('\nGenerate augmented features - Labels ...')
+    _create_augmented_features(os.path.join(path_train_dir, path_gt, path_train_gen), n_aug=n_aug, seed=seed)
+
+    if display_log:
+        print('\nRemove augmentation source images from train ...') 
+    _remove_ids(file_train, os.path.join(path_train_dir, path_image, path_train_gen))
+    _remove_ids(file_train, os.path.join(path_train_dir, path_gt, path_train_gen))
+    
+    return file_train, file_val
+
+def _remove_ids(file_id, path_image=''):
+    for file_ in file_id:
+        filename = os.path.join(path_image, file_)
+        if os.path.exists(filename):
+            os.remove(filename)
     
 def _get_ids_train_val(path, ratio=0.8, seed=2):
     
@@ -61,7 +100,7 @@ def _copy_data(path_src, filenames_train, filenames_val, path_train='aug_train',
         
     return path_train, path_val
     
-def _create_augmented_features(path_images, path_output='', n_aug=10, max_roatations=25, prob=0.3, seed=0):
+def _create_augmented_features(path_images, path_output='', n_aug=10, max_roatations=25, prob=0.8, seed=0):
   
     # Build pipeline and set input/output directories
     p = ag.Pipeline(save_format='png')

@@ -21,24 +21,39 @@ def extract_from_path(path, is_label=False):
             x_data[i] = mpimg.imread(os.path.join(path, file_))
         
     return x_data
-    
-def load_train_set(dir_, data='images', label='groundtruth', train_sub='aug_train', val_sub='aug_val'):
+
+
+def load_train_set(dir_, data='images', label='groundtruth', train_sub='aug_train', val_sub='aug_val', diplay_log=False):
         
     path_train_img = os.path.join(dir_, data, train_sub)
     path_train_label = os.path.join(dir_, label, train_sub)
     path_val_img = os.path.join(dir_, data, val_sub)
     path_val_label = os.path.join(dir_, label, val_sub)
     
-    print('Loading train images ...')
+    if diplay_log:
+        print('Loading train images ...')
     x_train_data = extract_from_path(path_train_img)
-    print('Loading train labels ...')
+    if diplay_log:
+        print('Loading train labels ...')
     y_train_label = extract_from_path(path_train_label, True)
-    print('Loading validation images ...')
+    if diplay_log:
+        print('Loading validation images ...')
     x_val_data = extract_from_path(path_val_img)
-    print('Loading validation labels ...')
+    if diplay_log:
+        print('Loading validation labels ...')
     y_val_label = extract_from_path(path_val_label, True)
     
     return x_train_data, y_train_label, x_val_data, y_val_label
+
+def load_train_set_from_id(dir_, id_train, data='images', label='groundtruth'):
+
+    shape_img = mpimg.imread(os.path.join(dir_, data, id_train[0])).shape
+    x_data = np.zeros((len(id_train),) + shape_img)
+    
+    for i, file_ in enumerate(id_train):
+        x_data[i] = mpimg.imread(os.path.join(dir_, data, file_))
+    
+    return x_data
 
 def load_test_set(path_data='data/test_set_images'):
     # Look for all file sin subfolder, store filename and path to filename (each test file is in a separate folder)
@@ -117,7 +132,6 @@ def get_useful_patches(patch_x, patch_y, min_threshold, max_threshold):
     useful_patches_y = patch_y[id_keep]
     
     return useful_patches_x, useful_patches_y
-
 
 def normalize_data(data, mode='image_wise', **kwargs):
     # Data pre-processing, Normalize each image with itself
