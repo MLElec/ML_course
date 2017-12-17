@@ -45,15 +45,16 @@ def load_train_set(dir_, data='images', label='groundtruth', train_sub='aug_trai
     
     return x_train_data, y_train_label, x_val_data, y_val_label
 
-def load_train_set_from_id(dir_, id_train, data='images', label='groundtruth'):
+def load_set_from_id(dir_, id_file, data='images', label='groundtruth'):
 
-    shape_img = mpimg.imread(os.path.join(dir_, data, id_train[0])).shape
-    x_data = np.zeros((len(id_train),) + shape_img)
-    
-    for i, file_ in enumerate(id_train):
+    shape_img = mpimg.imread(os.path.join(dir_, data, id_file[0])).shape
+    x_data = np.zeros((len(id_file),) + shape_img)
+    y_data = np.zeros((len(id_file),) + shape_img[:-1])
+
+    for i, file_ in enumerate(id_file):
         x_data[i] = mpimg.imread(os.path.join(dir_, data, file_))
-    
-    return x_data
+        y_data[i] = np.round(mpimg.imread(os.path.join(dir_, label, file_)))
+    return x_data, y_data
 
 def load_test_set(path_data='data/test_set_images'):
     # Look for all file sin subfolder, store filename and path to filename (each test file is in a separate folder)
@@ -211,6 +212,16 @@ def patch_to_label(patch, foreground_threshold=0.25):
     else:
         return 0
     
+def prediction_path_img(labels, patch_size=16):
+    n_patches = labels.shape[1]//patch_size
+    ypred = np.zeros((labels.shape[0], n_patches, n_patches))
+    for i in range(labels.shape[0]):
+        for j in range(0, n_patches):
+            for k in range(0, n_patches):
+                patch = labels[i, k*patch_size:(k+1)*patch_size, j*patch_size:(j+1)*patch_size]
+                ypred[i, j, k] = patch_to_label(patch)
+    
+    return ypred
     
 def get_distance_map(ims):
     ims_d = np.zeros(ims.shape)

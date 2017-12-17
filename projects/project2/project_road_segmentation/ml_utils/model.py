@@ -262,12 +262,12 @@ class Model:
         self.score_layer = tf.layers.conv2d(inputs=self.deconv4, filters=2, kernel_size=1,kernel_regularizer=regularizer)
         
         logits = tf.reshape(self.score_layer, (-1,2))
-        #y = tf.nn.softmax(logits)
+        y = tf.nn.softmax(logits)
         
-        #y_label = tf.multiply(tf.cast(self.tf_labels, tf.float32), self.tf_pen_road)
-        #self.cross_entropy = tf.reduce_mean(-tf.reduce_sum(tf.multiply(y_label, tf.log(y)), 1))
+        y_label = tf.multiply(tf.cast(self.tf_labels, tf.float32), self.tf_pen_road)
+        self.cross_entropy = tf.reduce_mean(-tf.reduce_sum(tf.multiply(y_label, tf.log(y)), 1))
 
-        self.cross_entropy = tf.losses.softmax_cross_entropy(onehot_labels=self.tf_labels, logits=logits, weights=weights)
+        # self.cross_entropy = tf.losses.softmax_cross_entropy(onehot_labels=self.tf_labels, logits=logits, weights=weights)
         self.reg_variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
         self.reg_term = tf.contrib.layers.apply_regularization(regularizer, self.reg_variables)
         self.loss = self.reg_term + self.cross_entropy
@@ -295,6 +295,15 @@ class Model:
             print("score size", self.score_layer.shape)
         
         
+    def _get_base_sets(self, path_train_dir='data/training', path_image='images', ratio=0.8):
+        
+        self.file_train, self.file_val = d_aug._get_ids_train_val(os.path.join(path_train_dir, path_image), ratio)
+        x_train, y_train = rs.load_set_from_id(path_train_dir, self.file_train)
+        x_valid, y_valid = rs.load_set_from_id(path_train_dir, self.file_val)
+        _, self.mean, self.std = rs.normalize_data(x_train, mode='all') 
+        
+        return x_train, y_train, x_valid, y_valid
+            
     def _get_train_validation(self, path_train_dir, epoch, ratio=0.8, n_aug=400):
     
         # Augment data. If first time. get id_train and validation
@@ -304,7 +313,7 @@ class Model:
             self.file_train, self.file_val = d_aug.genererate_data(path_train_dir, ratio=ratio, 
                                                                    n_aug=n_aug, display_log=False, seed=0)
             # Load base train (no augmentation) and take mean and std values
-            data_trainset = rs.load_train_set_from_id(path_train_dir, self.file_train)
+            data_trainset, _ = rs.load_set_from_id(path_train_dir, self.file_train)
             _, self.mean, self.std = rs.normalize_data(data_trainset, mode='all') 
         else:
             d_aug.genererate_data_from_id(self.file_train, self.file_val, path_train_dir, n_aug=n_aug, 
@@ -372,8 +381,8 @@ class Model:
                         [self.train_step, self.loss, self.cross_entropy, self.reg_term], # Returns
                         feed_dict={self.tf_data : batch_x, self.tf_labels : batch_y, # Feed variables
                                    self.tf_pen_road : batch_pen_road,
-                                   self.learning_rate : learning_rate_val })
-                                   #self.is_training : True})
+                                   self.learning_rate : learning_rate_val, #})
+                                   self.is_training : True})
                     
                     
                 # Test prediction to select worst predictions
@@ -398,7 +407,7 @@ class Model:
                     print("\t Validation set loss : ", loss_val, ", f1 : ", f1_val)
                     
 
-                if epoch == 30:
+                if epoch == 120:
                     learning_rate_val = 1e-1*learning_rate_val
                     
                 print("\n")
@@ -435,8 +444,8 @@ class Model:
             # Run model on batch
             pred, loss = sess.run([self.preds, self.loss], 
                                feed_dict={self.tf_data : batch_img, self.tf_labels : batch_labels, 
-                                          self.tf_pen_road : batch_pen_road })
-                                          #self.is_training : False})
+                                          self.tf_pen_road : batch_pen_road, #})
+                                          self.is_training : False})
             # Concatenate prediction and loss
             pred_tot = np.concatenate((pred_tot, pred), axis=0)
             loss_tot = np.concatenate((loss_tot, [loss]), axis=0)
@@ -463,8 +472,8 @@ class Model:
             # Get batches
             batch_img = imgs[splits[i]:splits[i+1]]
             # Run model on batch
-            pred = sess.run(self.preds, feed_dict={self.tf_data : batch_img })
-            # self.is_training : False})
+            pred = sess.run(self.preds, feed_dict={self.tf_data : batch_img ,#})
+                                                   self.is_training : False})
             # Concatenate prediction and loss
             pred_tot = np.concatenate((pred_tot, pred), axis=0)
 
@@ -563,17 +572,20 @@ class Model:
         plt.figure(figsize=(16,5))
         plt.suptitle('Statitics: {}'.format(_file))
         plt.subplot(1,2,1)
-        plt.plot(np.arange(len(r['f1'])), r['f1'][:,0] ,'-g', label='train F1')
-        plt.plot(np.arange(len(r['f1'])), r['f1'][:,1] ,'-b', label='vlaidation F1')
+        plt.plot(np.arange(len(r['f1_tr'])), r['f1_tr'] ,'-g', label='train F1')
+        plt.plot(r['epoch']*np.arange(len(r['f1_ts'])), r['f1_ts'] ,'-b', label='vlaidation F1')
         plt.xlabel('Epochs')
         plt.ylabel('F1')
         plt.ylim([0,1])
         plt.grid()
         plt.legend()
         plt.subplot(1,2,2)
-        plt.plot(np.arange(len(r['loss'])), r['loss'][:,0] ,'-g', label='train loss')
-        plt.plot(np.arange(len(r['loss'])), r['loss'][:,1] ,'-b', label='vlaidation loss')
+        plt.plot(np.arange(len(r['loss_tr'])), r['loss_tr'] ,'-g', label='train loss')
+        plt.plot(r['epoch']*np.arange(len(r['loss_ts'])), r['loss_ts'] ,'-b', label='vlaidation loss')
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
+        plt.ylim([0,1])
         plt.grid()
         plt.legend()
+        
+        print('Max f1 train: {:.4f}, valid: {:.4f}'.format(np.max(r['f1_tr']), np.max(r['f1_ts'])))
