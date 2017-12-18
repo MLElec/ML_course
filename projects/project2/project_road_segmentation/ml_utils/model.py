@@ -480,7 +480,7 @@ class Model:
         return pred_tot
             
         
-    def apply_model(self, img, path, nmax=10):
+    def apply_model(self, img, path, nmax=5):
         
         init = tf.global_variables_initializer()
         saver = tf.train.Saver()
