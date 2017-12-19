@@ -1,26 +1,61 @@
 # Project Road Segmentation
 
-For this choice of project task, we provide a set of satellite images acquired from GoogleMaps.
-We also provide ground-truth images where each pixel is labeled as road or background. 
 
-Your task is to train a classifier to segment roads in these images, i.e. assigns a label `road=1, background=0` to each pixel.
+## Setup for TAs
 
-Submission system environment setup:
+### 0. Create Conda environment (not mandatory)
 
-1. The dataset is available from the Kaggle page, as linked in the PDF project description
+This project was built using external libraries and python 3.5. To avoid packages conflicts and 
+run properly our code we recommend to create a new Anaconda ([download](https://www.anaconda.com/download/)) environment 
+and setup the environment using the following commands.
 
-2. Obtain the python notebook `segment_aerial_images.ipynb` from this github folder,
-to see example code on how to extract the images as well as corresponding labels of each pixel.
+```
+conda create -n env_road python=3.5
+source activate env_road
+```
 
-The notebook shows how to use `scikit learn` to generate features from each pixel, and finally train a linear classifier to predict whether each pixel is road or background. Or you can use your own code as well. Our example code here also provides helper functions to visualize the images, labels and predictions. In particular, the two functions `mask_to_submission.py` and `submission_to_mask.py` help you to convert from the submission format to a visualization, and vice versa.
+### 1. Install requirements
 
-3. As a more advanced approach, try `tf_aerial_images.py`, which demonstrates the use of a basic convolutional neural network in TensorFlow for the same prediction task.
+All needed packages are listed in `requirements.txt` file. Use `pip` command to install packages
+```
+pip install -r requirements.txt
+```
 
-Evaluation Metric:
- [https://www.kaggle.com/wiki/MeanFScore]
+
+### 2. Use
+
+Due to the size of the data (train and test) they were not committed on github. Place extracted data
+from kaggle in folder named `data`. To use pre-trained model please download model
+using dropbox link ([Final model download]()). The final folder should have the following structure:
+```
+project_final
+    |-- run.py
+    |-- ml_utils
+    |-- model
+        |-- submission_model.ckpt.data-00000-of-00001
+        |-- submission_model.ckpt.ckpt.meta
+        |-- submission_model.ckpt.index
+    |-- data
+        |-- training
+            |-- ...
+        |-- test_set_images
+            |-- ...
+```
 
 
-## Jupyter on cluster
+To run training use command 
+```
+python run.py
+```
+
+To generate submission file with model use the following command. The results will be 
+saved as `submission_final.csv`.
+```
+python run.py --model --model model/submission_model.ckpt
+```
+
+
+## Use GPU for dev
 
 Connect to cluster using ssh command. Replace [username] with your github username and [ip] with cluster IP (35.195.6.119)
 ```
