@@ -43,16 +43,18 @@ project_final
 ```
 
 
-To run training use command 
+To generate submission file with model use the following command. The results will be 
+saved as `submission_final.csv`.
+```
+python run.py --model model/submission_model.ckpt
+```
+
+To run full training (! really long even with GPU !) use command 
 ```
 python run.py
 ```
 
-To generate submission file with model use the following command. The results will be 
-saved as `submission_final.csv`.
-```
-python run.py --model --model model/submission_model.ckpt
-```
+
 
 
 ## Use GPU for dev
