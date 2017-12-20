@@ -3,6 +3,7 @@ from skimage import data
 import matplotlib.pyplot as plt
 from skimage.morphology import disk, closing, opening, remove_small_objects, dilation
 from skimage.measure import label, regionprops
+import numpy as np
 
 def process_cgt(img):
     
@@ -29,5 +30,6 @@ def process_all(ypreds, size_image=400):
     
     for i in range(pred_proc.shape[0]):
         pred_proc[i] = process_cgt(pred_proc[i])
-    
-    return pred_proc.flatten()
+
+    return pred_proc.flatten()  
+

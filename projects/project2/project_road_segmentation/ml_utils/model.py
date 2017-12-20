@@ -363,12 +363,14 @@ class Model:
                     # The rest of the set is a new generation
                     train_imgs_worst, train_gt_worst = self._get_worst_predictions_img(
                         train_imgs, train_gt, f1s_all, n_keep=n_worst)
+
                     train_imgs, train_gt, val_imgs, val_gt = self._get_train_validation(path_train_dir, epoch, 
                                                                                         ratio=ratio, n_aug=n_aug)
                     train_imgs = np.concatenate((train_imgs, train_imgs_worst), axis=0) 
                     train_gt = np.concatenate((train_gt, train_gt_worst), axis=0)
                 else:
                     # First epoch, get validation and train images/labels.
+
                     train_imgs, train_gt, val_imgs, val_gt = self._get_train_validation(path_train_dir, epoch, 
                                                                                         ratio=ratio, n_aug=n_aug)
                        
