@@ -347,8 +347,10 @@ class Model:
         
         loss_tr_time = np.empty(0)
         f1_tr_time = np.empty(0)
+        f1_tr_time_kag = np.empty(0)
         loss_ts_time = np.empty(0)
         f1_ts_time = np.empty(0)
+        f1_ts_time_kag = np.empty(0)
         
 
         with tf.Session() as sess:
@@ -394,12 +396,13 @@ class Model:
                     
                     
                 # Test prediction to select worst predictions
-                loss_train, f1_train, f1s_all = self.predict_model_cgt(sess, train_imgs, train_gt, nmax=nmax)
+                loss_train, f1_train, f1_train_kag, f1s_all = self.predict_model_cgt(sess, train_imgs, train_gt, nmax=nmax)
                     
                 # Save losses and f1 for training sets
                 loss_tr_time = np.concatenate((loss_tr_time, [loss_train]), axis=0)
                 f1_tr_time = np.concatenate((f1_tr_time, [f1_train]), axis=0)
-
+                f1_tr_time_kag = np.concatenate((f1_tr_time_kag, [f1_train_kag]), axis=0)
+                
                 # Feed back trainset
                 print("Recap epoch {} is {:.4f}s".format(epoch , time.time() - start_epoch))
                 print("\t last minibatch, loss : ", batch_loss, "cross entropy : ", train_cross_entropy, 
@@ -410,9 +413,10 @@ class Model:
                     
                     if val_imgs is not None or val_imgs.ndim >= 2:
                         
-                        loss_val, f1_val, _ = self.predict_model_cgt(sess, val_imgs, val_gt, nmax=nmax)
+                        loss_val, f1_val, f1_val_kag, _ = self.predict_model_cgt(sess, val_imgs, val_gt, nmax=nmax)
                         loss_ts_time = np.concatenate((loss_ts_time, [loss_val]), axis=0)
                         f1_ts_time = np.concatenate((f1_ts_time, [f1_val]), axis=0)
+                        f1_ts_time_kag = np.concatenate((f1_ts_time_kag, [f1_val_kag]), axis=0)
 
                         print("\t Validation set loss : ", loss_val, ", f1 : ", f1_val)
                     
@@ -430,8 +434,8 @@ class Model:
             
             # Save train and val f1 score / loss evolution
             self.save_path_stats =  os.path.join(self.path_models, str_date + '_' + self.model_type + '_stats.npy')
-            np.save(self.save_path_stats, {'loss_tr': loss_tr_time, 'f1_tr': f1_tr_time, 
-                                           'loss_ts': loss_ts_time, 'f1_ts': f1_ts_time,
+            np.save(self.save_path_stats, {'loss_tr': loss_tr_time, 'f1_tr': f1_tr_time, 'f1_tr_kag': f1_tr_time_kag, 
+                                           'loss_ts': loss_ts_time, 'f1_ts': f1_ts_time, 'f1_ts_kag': f1_ts_time_kag, 
                                            'epoch': display_epoch})
             print("Stats saved to file: %s" % self.save_path_stats)
 
@@ -460,16 +464,17 @@ class Model:
             pred_tot = np.concatenate((pred_tot, pred), axis=0)
             loss_tot = np.concatenate((loss_tot, [loss]), axis=0)
 
-        f1_tot = f1_score(np.reshape(gt, -1), np.reshape(pred_tot, -1), average='macro')
+        f1_tot = self.predict_f1(np.reshape(gt, -1), np.reshape(pred_tot, -1))
+        f1_kaggle = self.predict_f1_kaggle(np.reshape(gt, -1), np.reshape(pred_tot, -1))
         loss = np.mean(loss_tot)
         
         f1s = np.zeros(imgs.shape[0])
         for i in range(imgs.shape[0]):
             id_start = i*(imgs.shape[1]*imgs.shape[2])
             id_end = (i+1)*(imgs.shape[1]*imgs.shape[2])
-            f1s[i] = f1_score(np.reshape(gt, -1)[id_start:id_end], np.reshape(pred_tot, -1)[id_start:id_end], average='macro')
+            f1s[i] = self.predict_f1(np.reshape(gt, -1)[id_start:id_end], np.reshape(pred_tot, -1)[id_start:id_end])
         
-        return loss, f1_tot, f1s
+        return loss, f1_tot, f1_kaggle, f1s
     
     
     def predict_model(self, sess, imgs, nmax=10):
@@ -521,7 +526,14 @@ class Model:
         return layers
 
     def predict_f1(self, gt, pred):
-        return f1_score(np.reshape(gt, -1), np.reshape(pred, -1), average='macro') 
+        return f1_score(np.reshape(gt, -1), np.reshape(pred, -1)) 
+    
+    def predict_f1_kaggle(self, gt, pred):
+        gt_kaggle = rs.prediction_path_img(gt)
+        pred_kaggle = np.reshape(pred, (-1, pred.shape[1], pred.shape[1]))
+        pred_kaggle = rs.prediction_path_img(pred_kaggle)
+
+        return f1_score(np.reshape(gt, -1), np.reshape(pred, -1)) 
             
     def one_hot_convert(self, vector, num_classes=None):
         """ (From https://stackoverflow.com/questions/29831489/numpy-1-hot-array)
@@ -583,16 +595,16 @@ class Model:
         plt.figure(figsize=(16,5))
         plt.suptitle('Statitics: {}'.format(_file))
         plt.subplot(1,2,1)
-        plt.plot(np.arange(len(r['f1_tr'])), r['f1_tr'] ,'-g', label='train F1')
-        plt.plot(r['epoch']*np.arange(len(r['f1_ts'])), r['f1_ts'] ,'-b', label='vlaidation F1')
+        plt.plot(1+np.arange(len(r['f1_tr'])), r['f1_tr'] ,'-g', label='train F1')
+        plt.plot(r['epoch']+r['epoch']*np.arange(len(r['f1_ts'])), r['f1_ts'] ,'-b', label='vlaidation F1')
         plt.xlabel('Epochs')
         plt.ylabel('F1')
         plt.ylim([0,1])
         plt.grid()
         plt.legend()
         plt.subplot(1,2,2)
-        plt.plot(np.arange(len(r['loss_tr'])), r['loss_tr'] ,'-g', label='train loss')
-        plt.plot(r['epoch']*np.arange(len(r['loss_ts'])), r['loss_ts'] ,'-b', label='vlaidation loss')
+        plt.plot(1+np.arange(len(r['loss_tr'])), r['loss_tr'] ,'-g', label='train loss')
+        plt.plot(r['epoch']+r['epoch']*np.arange(len(r['loss_ts'])), r['loss_ts'] ,'-b', label='vlaidation loss')
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
         plt.ylim([0,1])

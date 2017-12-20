@@ -25,8 +25,7 @@ pip install -r requirements.txt
 ### 2. Use
 
 Due to the size of the data (train and test) they were not committed on github. Place extracted data
-from kaggle in folder named `data`. To use pre-trained model please download model
-using dropbox link ([Final model download]()). The final folder should have the following structure:
+from kaggle in folder named `data`. The final folder should have the following structure:
 ```
 project_final
     |-- run.py
