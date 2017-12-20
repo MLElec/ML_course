@@ -509,21 +509,18 @@ class Model:
     
     def get_model_layers(self, img, path):
         
+        layers_labels = ['C2', 'C9', 'D4', 'C22', 'C23']
+        layers_selected = [self.conv1_2, self.conv3_3,
+                           self.deconv4, self.conv9_2, self.score_layer]      
+        
         init = tf.global_variables_initializer()
         saver = tf.train.Saver()
         
         with tf.Session() as sess:
             saver.restore(sess, path)
-          
-            conv_1, conv_2, conv_3, conv_4, deconv_1, deconv_2, deconv_3, deconv_4, score = sess.run(
-                [self.conv1, self.conv2, self.conv3, self.conv4, 
-                 self.deconv1, self.deconv2, self.deconv3, self.deconv4, self.score_layer], 
-                 feed_dict={self.tf_data : [img]})
-            layers = {'conv_1': conv_1, 'conv_2': conv_2, 'conv_3': conv_3, 'conv_4': conv_4, 
-                      'deconv_1': deconv_1, 'deconv_2': deconv_2, 'deconv_3': deconv_3, 'deconv_4': deconv_4, 
-                      'score': score}
-            layers = OrderedDict(sorted(layers.items()))
-        return layers
+            layers = sess.run( layers_selected,  feed_dict={self.tf_data : [img], self.is_training : False})
+
+        return layers, layers_labels
 
     def predict_f1(self, gt, pred):
         return f1_score(np.reshape(gt, -1), np.reshape(pred, -1)) 
