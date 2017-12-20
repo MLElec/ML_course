@@ -318,7 +318,6 @@ class Model:
             # Load base train (no augmentation) and take mean and std values
             data_trainset, _ = rs.load_set_from_id(path_train_dir, self.file_train)
             _, self.mean, self.std = rs.normalize_data(data_trainset, mode='all') 
-            print('val files', self.file_val)
         else:
             d_aug.genererate_data_from_id(self.file_train, self.file_val, path_train_dir, n_aug=n_aug, 
                                           seed=epoch, display_log=False)
@@ -525,9 +524,12 @@ class Model:
     def predict_f1(self, gt, pred):
         return f1_score(np.reshape(gt, -1), np.reshape(pred, -1)) 
     
-    def predict_f1_kaggle(self, gt, pred):
-        gt_kaggle = rs.prediction_path_img(gt)
-        pred_kaggle = np.reshape(pred, (-1, pred.shape[1], pred.shape[1]))
+    def predict_f1_kaggle(self, gt, pred, shape_pred=400):
+        
+        gt_kaggle = np.reshape(gt, (-1, shape_pred, shape_pred))
+        gt_kaggle = rs.prediction_path_img(gt_kaggle)
+        
+        pred_kaggle = np.reshape(pred, (-1, shape_pred, shape_pred))
         pred_kaggle = rs.prediction_path_img(pred_kaggle)
 
         return f1_score(np.reshape(gt, -1), np.reshape(pred, -1)) 
