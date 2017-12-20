@@ -9,6 +9,8 @@ import Augmentor as ag
     
 def extract_from_path(path, is_label=False):
     files_data = np.array( [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))] )
+    if len(files_data) == 0:
+        return np.empty(0)
     id_sort = np.argsort([ int(filename[9:12]) for filename in files_data])
     files_data = files_data[id_sort]
     
@@ -136,6 +138,9 @@ def get_useful_patches(patch_x, patch_y, min_threshold, max_threshold):
 
 def normalize_data(data, mode='image_wise', **kwargs):
     # Data pre-processing, Normalize each image with itself
+    if data is None or data.ndim < 2:
+        return data, 0, 1
+    
     if mode == 'image_wise':
         n = data.shape[0]
         for i in range(n):

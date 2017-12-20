@@ -299,7 +299,10 @@ class Model:
         
         self.file_train, self.file_val = d_aug._get_ids_train_val(os.path.join(path_train_dir, path_image), ratio)
         x_train, y_train = rs.load_set_from_id(path_train_dir, self.file_train)
-        x_valid, y_valid = rs.load_set_from_id(path_train_dir, self.file_val)
+        if len(self.file_val) != 0:
+            x_valid, y_valid = rs.load_set_from_id(path_train_dir, self.file_val)
+        else:
+            x_valid, y_valid = None, None
         _, self.mean, self.std = rs.normalize_data(x_train, mode='all') 
         
         return x_train, y_train, x_valid, y_valid
@@ -315,10 +318,11 @@ class Model:
             # Load base train (no augmentation) and take mean and std values
             data_trainset, _ = rs.load_set_from_id(path_train_dir, self.file_train)
             _, self.mean, self.std = rs.normalize_data(data_trainset, mode='all') 
+            print('val files', self.file_val)
         else:
             d_aug.genererate_data_from_id(self.file_train, self.file_val, path_train_dir, n_aug=n_aug, 
                                           seed=epoch, display_log=False)
-
+        
         train_imgs, train_gt, val_imgs, val_gt = rs.load_train_set(path_train_dir)
         train_imgs, _, _ = rs.normalize_data(train_imgs, mode='all', mean_ref = self.mean, std_ref = self.std) 
         val_imgs, _, _ = rs.normalize_data(val_imgs, mode='all', mean_ref = self.mean, std_ref = self.std) 
@@ -334,7 +338,7 @@ class Model:
             
     def train_model(self, path_train_dir, 
                     n_epoch = 4, batch_size = 5, learning_rate_val = 1e-3, nmax=10, 
-                    seed=0, display_epoch=10, n_aug=400, n_worst=50):
+                    seed=0, display_epoch=10, n_aug=400, n_worst=50, ratio=0.8):
 
         
         init = tf.global_variables_initializer()
@@ -359,12 +363,14 @@ class Model:
                     # The rest of the set is a new generation
                     train_imgs_worst, train_gt_worst = self._get_worst_predictions_img(
                         train_imgs, train_gt, f1s_all, n_keep=n_worst)
-                    train_imgs, train_gt, val_imgs, val_gt = self._get_train_validation(path_train_dir, epoch, n_aug=n_aug)
+                    train_imgs, train_gt, val_imgs, val_gt = self._get_train_validation(path_train_dir, epoch, 
+                                                                                        ratio=ratio, n_aug=n_aug)
                     train_imgs = np.concatenate((train_imgs, train_imgs_worst), axis=0) 
                     train_gt = np.concatenate((train_gt, train_gt_worst), axis=0)
                 else:
                     # First epoch, get validation and train images/labels.
-                    train_imgs, train_gt, val_imgs, val_gt = self._get_train_validation(path_train_dir, epoch, n_aug=n_aug)
+                    train_imgs, train_gt, val_imgs, val_gt = self._get_train_validation(path_train_dir, epoch, 
+                                                                                        ratio=ratio, n_aug=n_aug)
                        
                 # Train over train set using mutliple batches
                 print('\nStart train with data shape: {}'.format(train_imgs.shape))
@@ -400,11 +406,13 @@ class Model:
                 
                 if epoch % display_epoch == 0:
                     
-                    loss_val, f1_val, _ = self.predict_model_cgt(sess, val_imgs, val_gt, nmax=nmax)
-                    loss_ts_time = np.concatenate((loss_ts_time, [loss_val]), axis=0)
-                    f1_ts_time = np.concatenate((f1_ts_time, [f1_val]), axis=0)
-                    
-                    print("\t Validation set loss : ", loss_val, ", f1 : ", f1_val)
+                    if val_imgs is not None or val_imgs.ndim >= 2:
+                        
+                        loss_val, f1_val, _ = self.predict_model_cgt(sess, val_imgs, val_gt, nmax=nmax)
+                        loss_ts_time = np.concatenate((loss_ts_time, [loss_val]), axis=0)
+                        f1_ts_time = np.concatenate((f1_ts_time, [f1_val]), axis=0)
+
+                        print("\t Validation set loss : ", loss_val, ", f1 : ", f1_val)
                     
 
                 if epoch == 120:
@@ -469,6 +477,7 @@ class Model:
         pred_tot = np.empty(0)
 
         for i in range(splits.shape[0]-1):
+            print('{}/{}'.format(splits[i], imgs.shape[0]))
             # Get batches
             batch_img = imgs[splits[i]:splits[i+1]]
             # Run model on batch
