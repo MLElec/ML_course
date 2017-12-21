@@ -532,7 +532,7 @@ class Model:
         pred_kaggle = np.reshape(pred, (-1, shape_pred, shape_pred))
         pred_kaggle = rs.prediction_path_img(pred_kaggle)
 
-        return f1_score(np.reshape(gt, -1), np.reshape(pred, -1)) 
+        return f1_score(np.reshape(gt_kaggle, -1), np.reshape(pred_kaggle, -1)) 
             
     def one_hot_convert(self, vector, num_classes=None):
         """ (From https://stackoverflow.com/questions/29831489/numpy-1-hot-array)
