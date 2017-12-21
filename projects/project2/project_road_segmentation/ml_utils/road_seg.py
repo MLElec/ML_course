@@ -8,14 +8,22 @@ import Augmentor as ag
 
     
 def extract_from_path(path, is_label=False):
+    """
+    Extract images from path. Is is_label is set, the returned images will be an image with 1 and 0 values only.
+    """
+    
+    # Get only files in the folder
     files_data = np.array( [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))] )
+    # Check if folder is empty
     if len(files_data) == 0:
         return np.empty(0)
+    # Sort files accoring to their number (given by satImage_xxx.png)
     id_sort = np.argsort([ int(filename[9:12]) for filename in files_data])
     files_data = files_data[id_sort]
-    
+    # Read one image to get shape of images
     shape_img = mpimg.imread(os.path.join(path, files_data[0])).shape
     x_data = np.zeros((len(files_data),) + shape_img)
+    # Iterate over images
     for i, file_ in enumerate(files_data):
         if is_label:
             x_data[i] = np.round(mpimg.imread(os.path.join(path, file_)))
@@ -26,7 +34,9 @@ def extract_from_path(path, is_label=False):
 
 
 def load_train_set(dir_, data='images', label='groundtruth', train_sub='aug_train', val_sub='aug_val', diplay_log=False):
-        
+    """
+    Load images in train set. Arguments are usually fixed but can be modified to use it with different folder structure.
+    """        
     path_train_img = os.path.join(dir_, data, train_sub)
     path_train_label = os.path.join(dir_, label, train_sub)
     path_val_img = os.path.join(dir_, data, val_sub)
@@ -48,18 +58,25 @@ def load_train_set(dir_, data='images', label='groundtruth', train_sub='aug_trai
     return x_train_data, y_train_label, x_val_data, y_val_label
 
 def load_set_from_id(dir_, id_file, data='images', label='groundtruth'):
-
+    """
+    Load images according to their filename (id_file)
+    """   
+    
+    # Check shape of image
     shape_img = mpimg.imread(os.path.join(dir_, data, id_file[0])).shape
     x_data = np.zeros((len(id_file),) + shape_img)
     y_data = np.zeros((len(id_file),) + shape_img[:-1])
 
+    # Iterate over images
     for i, file_ in enumerate(id_file):
         x_data[i] = mpimg.imread(os.path.join(dir_, data, file_))
         y_data[i] = np.round(mpimg.imread(os.path.join(dir_, label, file_)))
     return x_data, y_data
 
 def load_test_set(path_data='data/test_set_images'):
-    # Look for all file sin subfolder, store filename and path to filename (each test file is in a separate folder)
+    """
+    Look for all files in subfolder, store filename and path to filename (each test file is in a separate folder)
+    """
     files_data = []
     path_test = []
     for path, subdirs, files in os.walk(path_data):
@@ -80,7 +97,10 @@ def load_test_set(path_data='data/test_set_images'):
     return x_data
 
 def get_patches_all(x_data, y_label=None, patch_size=16):
-    # Compute final siz of array of patches
+    """
+    Take images as input and return same images cut into patches
+    """
+    # Compute final size of array of patches
     n_patch_h = x_data.shape[1] // patch_size
     n_patch_w = x_data.shape[2] // patch_size
     x_patches = np.zeros((x_data.shape[0]*n_patch_h*n_patch_w, patch_size, patch_size) + x_data.shape[3:])
@@ -99,6 +119,9 @@ def get_patches_all(x_data, y_label=None, patch_size=16):
     return x_patches, y_patches, y_batch_label
 
 def get_patches(x_data, y_label=None, patch_size=16):
+    """
+    Take image as input and return same images cut into patches
+    """    
     # Check if dimension are ok (x_data shapes are mulitples of patch)
     assert(x_data.shape[0] % patch_size == 0 and x_data.shape[1] % patch_size == 0)
     # Create new array that will contain all the patches
@@ -118,6 +141,9 @@ def get_patches(x_data, y_label=None, patch_size=16):
     return x_patches, y_patches
 
 def get_patches_label(y_batch):
+    """
+    Take label as input and return same images cut into patches
+    """
     # Create vector of one and zeros (1 is road, 0 is background)
     y_label_unique = np.zeros((y_batch.shape[0]))
     # Take mean value of pixel to estiamte road yes or not
@@ -137,6 +163,11 @@ def get_useful_patches(patch_x, patch_y, min_threshold, max_threshold):
     return useful_patches_x, useful_patches_y
 
 def normalize_data(data, mode='image_wise', **kwargs):
+    """
+    Normalize data. Can be use in two different modes 'image_wise' and 'all'. image_wise will nomralize image with 
+    itself (deprecated). All wll take the mean and the std of the full set. Mean and std can be passed as agruments to
+    normalize with train set.
+    """
     # Data pre-processing, Normalize each image with itself
     if data is None or data.ndim < 2:
         return data, 0, 1
@@ -156,6 +187,8 @@ def normalize_data(data, mode='image_wise', **kwargs):
         data_norm = ((data-kwargs['mean_ref'])/kwargs['std_ref']).copy()
         return data_norm, kwargs['mean_ref'], kwargs['std_ref']
 
+    
+################# DISPLAY FUNCTION FOR A NICE REPORT <3
 
 def display_predictions(y_pred, img_ref, img_cgt=None, n_display=3):
     
@@ -196,6 +229,9 @@ def display_predictions_nocgt(y_pred, img_ref, n_display=3):
         
         
 def create_submission(y_pred, submission_filename, images_size=608, patch_size=16):
+    """
+    Create submission file for kaggle
+    """
     n_patches = images_size//patch_size
     text = 'id,prediction'
     with open(submission_filename, 'w') as f:
@@ -211,6 +247,9 @@ def create_submission(y_pred, submission_filename, images_size=608, patch_size=1
                     
                     
 def patch_to_label(patch, foreground_threshold=0.25):
+    """
+    COnvert patch to label, use threhold to set amount
+    """
     df = np.mean(patch)
     if df > foreground_threshold:
         return 1
@@ -218,6 +257,9 @@ def patch_to_label(patch, foreground_threshold=0.25):
         return 0
     
 def prediction_path_img(labels, patch_size=16):
+    """
+    Convert full image to labels.
+    """
     n_patches = labels.shape[1]//patch_size
     ypred = np.zeros((labels.shape[0], n_patches, n_patches))
     for i in range(labels.shape[0]):
@@ -228,6 +270,9 @@ def prediction_path_img(labels, patch_size=16):
     
     return ypred
     
+    
+################# DEPRECATED
+
 def get_distance_map(ims):
     ims_d = np.zeros(ims.shape)
     for i in range(ims.shape[0]):

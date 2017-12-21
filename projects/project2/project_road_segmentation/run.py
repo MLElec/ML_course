@@ -56,5 +56,5 @@ if __name__ == "__main__":
     print('\nDisplay predictions')
     im_proc = np.reshape(y_pred_test_proc, (-1, 608, 608))
     rs.display_predictions(y_pred_test, test_img, im_proc, n_display=10)
-    print('\nWrite submission file')
+    print('\nWrite submission file: submission_final.csv')
     rs.create_submission(im_proc, 'submission_final.csv')

@@ -11,8 +11,12 @@ from PIL import Image
 
 def genererate_data_from_id(file_train, file_val, path_train_dir, path_image='images', 
                             path_gt='groundtruth', n_aug=400, seed=0, display_log=True):
-    
-        # Copy file to repective folders
+    """
+    Takes filename of both training and validation set and generate augmented features. 
+    The seed can be used to reproduce results. The number of augmented images can be set using n_aug. Note that 
+    the images will be generated in a separate folder.
+    """
+    # Copy file to repective folders
     if display_log:
         print('\nCopy to sub folders ...')
     path_train_gen, path_val_gen = _copy_data(os.path.join(path_train_dir, path_image), file_train, file_val)
@@ -32,6 +36,11 @@ def genererate_data_from_id(file_train, file_val, path_train_dir, path_image='im
     _remove_ids(file_train, os.path.join(path_train_dir, path_gt, path_train_gen))
 
 def genererate_data(path_train_dir, path_image='images', path_gt='groundtruth', ratio=0.8, n_aug=400, seed=0, display_log=True):
+    """
+    Function similar to genererate_data_from_id. However it take only the path to the folder a input to generate augmented data. 
+    The seed can be used to reproduce results. The number of augmented images can be set using n_aug. Note that 
+    the images will be generated in a separate folder.
+    """
     
     # Generate output folders and copy data to them
     if display_log:
@@ -52,6 +61,7 @@ def genererate_data(path_train_dir, path_image='images', path_gt='groundtruth', 
         print('\nGenerate augmented features - Labels ...')
     _create_augmented_features(os.path.join(path_train_dir, path_gt, path_train_gen), n_aug=n_aug, seed=seed)
 
+    # Remove source images so we do not learn from base images
     if display_log:
         print('\nRemove augmentation source images from train ...') 
     _remove_ids(file_train, os.path.join(path_train_dir, path_image, path_train_gen))
@@ -60,19 +70,24 @@ def genererate_data(path_train_dir, path_image='images', path_gt='groundtruth', 
     return file_train, file_val
 
 def _remove_ids(file_id, path_image=''):
+    """
+    Removes a file specified by file_id
+    """
     for file_ in file_id:
         filename = os.path.join(path_image, file_)
         if os.path.exists(filename):
             os.remove(filename)
     
 def _get_ids_train_val(path, ratio=0.8, seed=2):
-    
+    """
+    Returns file id for training and testing set. The repartition is given by ratio value. We can set the seed
+    """
     np.random.seed(seed)
     files_data = np.array( [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))] )
     id_sort = np.argsort([ int(filename[9:12]) for filename in files_data])
     files_data = files_data[id_sort]
     
-        # Id split for Valisation and test
+    # Id split for Valisation and test
     ids = np.random.permutation(files_data.shape[0])
     id_train = ids[:int(files_data.shape[0]*ratio)]
     id_valid = ids[int(files_data.shape[0]*ratio):]
@@ -80,7 +95,10 @@ def _get_ids_train_val(path, ratio=0.8, seed=2):
     return files_data[id_train], files_data[id_valid]
     
 def _copy_data(path_src, filenames_train, filenames_val, path_train='aug_train', path_val='aug_val'):
-    
+    """
+    Copy the file from a specific path to the final folders. The augmented train and validation images are not in the same folder.
+    The name of the destination folder are defined by path_train and path_val.
+    """
     path_dest_train = os.path.join(path_src, path_train)
     path_dest_val = os.path.join(path_src, path_val)
     
@@ -101,7 +119,11 @@ def _copy_data(path_src, filenames_train, filenames_val, path_train='aug_train',
     return path_train, path_val
     
 def _create_augmented_features(path_images, path_output='', n_aug=10, max_roatations=25, prob=0.8, seed=0):
-  
+    """
+    Created augmented images using Augmentor library. The output path is usualy the folder itself. n_aug is the number of
+    images to generate, max_roatations is the maximum ratation allowed for augmentation. prob set the probability of
+    each transformation to occur.
+    """  
     # Build pipeline and set input/output directories
     p = ag.Pipeline(save_format='png')
     ag.Pipeline.set_seed(seed)
@@ -116,7 +138,10 @@ def _create_augmented_features(path_images, path_output='', n_aug=10, max_roatat
     _pipeline(p, n_aug)
 
 def _pipeline(pipe, n):
-    
+    '''
+    Redefine pipeline function to allow us to set specific filename for destination files. Similar to the one of the library
+    but save the images with format : satImage_{:03d} where {:03d} is the number of the image generated.
+    '''      
     sample_count = 1
     while sample_count <= n:
         for augmentor_image in pipe.augmentor_images:
