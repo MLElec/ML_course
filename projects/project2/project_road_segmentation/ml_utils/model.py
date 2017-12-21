@@ -12,10 +12,12 @@ import ml_utils.road_seg as rs
 
 
 class Model:
+    """ This class holds all the functions necessary to build, train and run our models on the provided data """
     
     def __init__(self, reg = 1e-2, n_filters = 64, kernel_size=3, display_log=True, 
                  path_models='model', model_type='cnn'):
-                
+        """ Model initializer """
+        
         # Settings model
         self.reg = reg
         self.n_filters = n_filters
@@ -38,23 +40,27 @@ class Model:
             self.build_model_cnn(display_log)
         
     def bn_conv_relu(self, inputs,kernel_size, n_filters, is_training, regularizer):
+        """ Wrapper to generate batch normalization -> convolution -> relu """
+        
         return tf.layers.conv2d(inputs=tf.layers.batch_normalization(inputs, training=is_training), 
                                 filters=n_filters,kernel_size=kernel_size, kernel_regularizer=regularizer,
                                 activation=tf.nn.relu,padding='SAME')
                 
         
     def bn_upconv_relu(self, inputs,kernel_size, n_filters, is_training, regularizer):
+        """ Wrapper to generate batch normalization -> deconvolution -> relu """
+
         return tf.layers.conv2d_transpose(inputs=tf.layers.batch_normalization(inputs, training=is_training), 
                                           filters=n_filters, kernel_size=kernel_size, strides=2, 
                                           kernel_regularizer=regularizer, activation=tf.nn.relu, padding='SAME')
     
     
     def build_model_cnn_bn(self, display_log, seed=0):
-        
+        """ Build the model that uses batch normalization layers (this is the latest model) """
         tf.reset_default_graph()
         tf.set_random_seed(seed)
 
-        # Plae holders
+        # Place holders
         self.learning_rate = tf.placeholder(tf.float32)
         self.is_training = tf.placeholder(tf.bool)
         self.tf_data = tf.placeholder(tf.float32,[None, None, None, 3])
@@ -199,7 +205,7 @@ class Model:
        
     
     def build_model_cnn(self, display_log, seed=0):
-        
+        """ Build an intermediate version of the model. This uses no batch normalization and has one convolution per cell"""
         tf.reset_default_graph()
         tf.set_random_seed(seed)
 
@@ -296,6 +302,7 @@ class Model:
         
         
     def _get_base_sets(self, path_train_dir='data/training', path_image='images', ratio=0.8):
+        """ Split the data into training and validation set according to given ratio"""
         
         self.file_train, self.file_val = d_aug._get_ids_train_val(os.path.join(path_train_dir, path_image), ratio)
         x_train, y_train = rs.load_set_from_id(path_train_dir, self.file_train)
@@ -308,7 +315,8 @@ class Model:
         return x_train, y_train, x_valid, y_valid
             
     def _get_train_validation(self, path_train_dir, epoch, ratio=0.8, n_aug=400):
-    
+        """ Return augmented image sets """
+        
         # Augment data. If first time. get id_train and validation
 
         if self.file_train is None or self.file_val is None:
@@ -330,6 +338,8 @@ class Model:
     
     
     def _get_worst_predictions_img(self, train_imgs, train_gt, f1s, n_keep=50):
+        """ Returns the worst predicted images"""
+        
             id_sorted = np.argsort(f1s)[:n_keep]
             print('f1 worst, mean: {:.4f}'.format(np.mean(f1s[id_sorted])))
             return train_imgs[id_sorted], train_gt[id_sorted]
@@ -338,6 +348,7 @@ class Model:
     def train_model(self, path_train_dir, 
                     n_epoch = 4, batch_size = 5, learning_rate_val = 1e-3, nmax=10, 
                     seed=0, display_epoch=10, n_aug=400, n_worst=50, ratio=0.8):
+        """ Train a model """
 
         
         init = tf.global_variables_initializer()
@@ -440,6 +451,7 @@ class Model:
 
             
     def predict_model_cgt(self, sess, imgs, gt, nmax=10):
+        """ Predict images and evaluate F1 score """
         imgs_size = gt.shape[0]
         splits = np.linspace(0, imgs_size, 1+imgs_size//nmax).astype(int)
 
@@ -477,6 +489,7 @@ class Model:
     
     
     def predict_model(self, sess, imgs, nmax=10):
+        """ Predict images without evaluating F1-score """
         imgs_size = imgs.shape[0]
         splits = np.linspace(0, imgs_size, 1+imgs_size//nmax).astype(int)
 
@@ -489,13 +502,14 @@ class Model:
             # Run model on batch
             pred = sess.run(self.preds, feed_dict={self.tf_data : batch_img ,#})
                                                    self.is_training : False})
-            # Concatenate prediction and loss
+            # Concatenate prediction
             pred_tot = np.concatenate((pred_tot, pred), axis=0)
 
         return pred_tot
             
         
     def apply_model(self, img, path, nmax=5):
+        """ Predict images without evaluating F1-score """
         
         init = tf.global_variables_initializer()
         saver = tf.train.Saver()
@@ -507,7 +521,7 @@ class Model:
         return pred
     
     def get_model_layers(self, img, path):
-        
+        """ Return a few selected layers for evaluation """
         layers_labels = ['C2', 'C9', 'D4', 'C22', 'C23']
         layers_selected = [self.conv1_2, self.conv3_3,
                            self.deconv4, self.conv9_2, self.score_layer]      
@@ -522,9 +536,11 @@ class Model:
         return layers, layers_labels
 
     def predict_f1(self, gt, pred):
+        """ Predict F1-score Pixel-wise """"
         return f1_score(np.reshape(gt, -1), np.reshape(pred, -1)) 
     
     def predict_f1_kaggle(self, gt, pred, shape_pred=400):
+        """ Predict F1-score Patch-wise """
         
         gt_kaggle = np.reshape(gt, (-1, shape_pred, shape_pred))
         gt_kaggle = rs.prediction_path_img(gt_kaggle)
@@ -576,6 +592,7 @@ class Model:
     
     
     def plot_layers(self, im_src, layers):
+        """ Plot output of layers """
         n_lines = np.ceil((len(layers)+1)/3).astype(int)
         plt.figure(figsize=(16, 5*n_lines))
         # Base image (one that went through the layers)
@@ -591,7 +608,7 @@ class Model:
             
             
     def plot_stats(self, _file=None):
-        
+        """ Plot training statistics """
         if _file is not None:
             pass
         elif self.save_path_stats is not None:
