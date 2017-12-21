@@ -1,23 +1,25 @@
 from skimage.morphology import skeletonize, thin, skeletonize_3d
 from skimage import data
 import matplotlib.pyplot as plt
-from skimage.morphology import disk, closing, opening, remove_small_objects, dilation
+from skimage.morphology import disk, rectangle, closing, opening, remove_small_objects, dilation
 from skimage.measure import label, regionprops
 import numpy as np
 
 def process_cgt(img):
     
-    r = closing(img, disk(5))
-    corr = skeletonize_3d(r.astype(np.uint8))
-    z = dilation(corr, disk(5))
-    res = (r + z) >= 1
-    res = remove_small_objects(res.astype(bool), min_size = 200)
+    r = remove_small_objects(img.astype(bool), min_size = 20)
     
-    label_image = label(res)
+    r = closing(r, disk(5))
+    r = closing(r, rectangle(1, 15))
+    r = closing(r, rectangle(15, 1))
+    
+    label_image = label(r)
     
     for i, region in enumerate(regionprops(label_image)):
         minr, minc, maxr, maxc = region.bbox
         if minr == 0 or minc == 0 or maxr == img.shape[0] or maxc == img.shape[0]:
+            continue
+        if region.area > 200:
             continue
 
         label_image[label_image == i+1] = 0

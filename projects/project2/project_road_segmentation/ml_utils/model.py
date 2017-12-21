@@ -1,7 +1,7 @@
 import tensorflow as tf
 import datetime
 import numpy as np
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, precision_score, recall_score
 import os
 from collections import OrderedDict
 import matplotlib.pyplot as plt
@@ -533,6 +533,16 @@ class Model:
         pred_kaggle = rs.prediction_path_img(pred_kaggle)
 
         return f1_score(np.reshape(gt_kaggle, -1), np.reshape(pred_kaggle, -1)) 
+    
+    def predict_pr_kaggle(self, gt, pred, shape_pred=400):
+        
+        gt_kaggle = np.reshape(gt, (-1, shape_pred, shape_pred))
+        gt_kaggle = rs.prediction_path_img(gt_kaggle)
+        
+        pred_kaggle = np.reshape(pred, (-1, shape_pred, shape_pred))
+        pred_kaggle = rs.prediction_path_img(pred_kaggle)
+
+        return precision_score(np.reshape(gt_kaggle, -1), np.reshape(pred_kaggle, -1)), recall_score(np.reshape(gt_kaggle, -1), np.reshape(pred_kaggle, -1)) 
             
     def one_hot_convert(self, vector, num_classes=None):
         """ (From https://stackoverflow.com/questions/29831489/numpy-1-hot-array)
@@ -591,19 +601,24 @@ class Model:
             return
         
         r = np.load(_file)[()]
-        plt.figure(figsize=(16,5))
-        plt.suptitle('Statitics: {}'.format(_file))
-        plt.subplot(1,2,1)
+        plt.figure(figsize=(7,5))
+        plt.title('Statitics of training')
+        plt.subplot(1,1,1)
         plt.plot(1+np.arange(len(r['f1_tr'])), r['f1_tr'] ,'-g', label='train F1')
-        plt.plot(r['epoch']+r['epoch']*np.arange(len(r['f1_ts'])), r['f1_ts'] ,'-b', label='vlaidation F1')
+        if not any( np.isnan(r['f1_ts'])):
+            plt.plot(r['epoch']+r['epoch']*np.arange(len(r['f1_ts'])), 
+                     r['f1_ts'] ,'-b', label='vlaidation F1')
         plt.xlabel('Epochs')
         plt.ylabel('F1')
         plt.ylim([0,1])
         plt.grid()
         plt.legend()
-        plt.subplot(1,2,2)
+        return
+        plt.subplot(2,1,2)
         plt.plot(1+np.arange(len(r['loss_tr'])), r['loss_tr'] ,'-g', label='train loss')
-        plt.plot(r['epoch']+r['epoch']*np.arange(len(r['loss_ts'])), r['loss_ts'] ,'-b', label='vlaidation loss')
+        if not any( np.isnan(r['loss_ts'])):
+            plt.plot(r['epoch']+r['epoch']*np.arange(len(r['loss_ts'])), 
+                     r['loss_ts'] ,'-b', label='vlaidation loss')
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
         plt.ylim([0,1])

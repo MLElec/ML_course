@@ -43,12 +43,12 @@ project_final
 
 
 To generate submission file with model use the following command. The results will be 
-saved as `submission_final.csv`.
+saved as `submission_final.csv`. It take around 5 minutes with GPU.
 ```
 python run.py --model model/submission_model.ckpt
 ```
 
-To run full training (! really long even with GPU !) use command 
+To run full training (! really long even with GPU, around 20h !) use command
 ```
 python run.py
 ```
