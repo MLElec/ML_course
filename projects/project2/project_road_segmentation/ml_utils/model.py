@@ -36,8 +36,10 @@ class Model:
         
         if self.model_type == 'cnn_bn':
             self.build_model_cnn_bn(display_log)
-        else:
+        elif self.model_type == 'cnn':
             self.build_model_cnn(display_log)
+        elif self.model_type == 'fine_tune':
+            self.build_fine_tune()
         
     def bn_conv_relu(self, inputs,kernel_size, n_filters, is_training, regularizer):
         """ Wrapper to generate batch normalization -> convolution -> relu """
@@ -141,10 +143,10 @@ class Model:
         self.deconv4 = self.bn_upconv_relu(self.conv8_2, self.kernel_size, self.n_filters, self.is_training, regularizer)
 
         
-        deconv4_c = tf.concat([self.deconv4, self.conv1_2], axis=3)
+        self.deconv4_c = tf.concat([self.deconv4, self.conv1_2], axis=3)
         # deconv4_c = 0.5*tf.add(self.deconv4, self.conv1)
 
-        self.conv9_1 = self.bn_conv_relu(deconv4_c, self.kernel_size, 1.5*self.n_filters, self.is_training, regularizer)
+        self.conv9_1 = self.bn_conv_relu(self.deconv4_c, self.kernel_size, 1.5*self.n_filters, self.is_training, regularizer)
         
         self.conv9_2 = self.bn_conv_relu(self.conv9_1, self.kernel_size, self.n_filters, self.is_training, regularizer)
                 
@@ -198,7 +200,7 @@ class Model:
             print("conv8_1 size", self.conv8_1.shape)
             print("conv8_2 size", self.conv8_2.shape)
             print("deconv4 size", self.deconv4.shape) 
-            print("deconv4_c size", deconv4_c.shape)
+            print("deconv4_c size", self.deconv4_c.shape)
             print("conv9_1 size", self.conv9_1.shape)
             print("conv9_2 size", self.conv9_2.shape)
             print("score size", self.score_layer.shape)
@@ -340,9 +342,9 @@ class Model:
     def _get_worst_predictions_img(self, train_imgs, train_gt, f1s, n_keep=50):
         """ Returns the worst predicted images"""
         
-            id_sorted = np.argsort(f1s)[:n_keep]
-            print('f1 worst, mean: {:.4f}'.format(np.mean(f1s[id_sorted])))
-            return train_imgs[id_sorted], train_gt[id_sorted]
+        id_sorted = np.argsort(f1s)[:n_keep]
+        print('f1 worst, mean: {:.4f}'.format(np.mean(f1s[id_sorted])))
+        return train_imgs[id_sorted], train_gt[id_sorted]
             
             
     def train_model(self, path_train_dir, 
@@ -366,6 +368,7 @@ class Model:
         with tf.Session() as sess:
 
             sess.run(init)
+            print('\nStart train with data shape: {}'.format(train_imgs.shape))
 
             for epoch in range(1, n_epoch+1):
                 start_epoch = time.time()
@@ -386,8 +389,7 @@ class Model:
                     train_imgs, train_gt, val_imgs, val_gt = self._get_train_validation(path_train_dir, epoch, 
                                                                                         ratio=ratio, n_aug=n_aug)
                        
-                # Train over train set using mutliple batches
-                print('\nStart train with data shape: {}'.format(train_imgs.shape))
+                # Train over train set using multiple batches
                 indices = np.random.permutation(train_gt.shape[0])
                 for batch_iter in range(int(np.ceil(train_gt.shape[0]/batch_size))):
                        
@@ -487,6 +489,41 @@ class Model:
         
         return loss, f1_tot, f1_kaggle, f1s
     
+    def fine_predict_model_cgt(self, sess, imgs, gt, nmax=10):
+        """ Predict images and evaluate F1 score """
+        imgs_size = gt.shape[0]
+        splits = np.linspace(0, imgs_size, 1+imgs_size//nmax).astype(int)
+
+        pred_tot = np.empty(0)
+        loss_tot = np.empty(0)
+
+        for i in range(splits.shape[0]-1):
+            # Get batches
+            batch_img = imgs[splits[i]:splits[i+1]]
+            batch_gt = gt[splits[i]:splits[i+1]]
+            batch_len = splits[i+1]-splits[i]
+            batch_labels = self.one_hot_convert(np.reshape(batch_gt, -1).astype(int),2)
+            
+            # Run model on batch
+            pred, loss = sess.run([self.fine_preds, self.fine_loss], 
+                               feed_dict={self.cnn_output : batch_img, self.tf_labels : batch_labels, 
+                                          self.is_training : False})
+            # Concatenate prediction and loss
+            pred_tot = np.concatenate((pred_tot, pred), axis=0)
+            loss_tot = np.concatenate((loss_tot, [loss]), axis=0)
+
+
+        f1_tot = self.predict_f1(np.reshape(gt, -1), np.reshape(pred_tot, -1))
+        f1_kaggle = self.predict_f1_kaggle(np.reshape(gt, -1), np.reshape(pred_tot, -1))
+        loss = np.mean(loss_tot)
+        
+        f1s = np.zeros(imgs.shape[0])
+        for i in range(imgs.shape[0]):
+            id_start = i*(imgs.shape[1]*imgs.shape[2])
+            id_end = (i+1)*(imgs.shape[1]*imgs.shape[2])
+            f1s[i] = self.predict_f1(np.reshape(gt, -1)[id_start:id_end], np.reshape(pred_tot, -1)[id_start:id_end])
+        
+        return pred_tot, loss, f1_tot, f1_kaggle, f1s
     
     def predict_model(self, sess, imgs, nmax=10):
         """ Predict images without evaluating F1-score """
@@ -506,7 +543,138 @@ class Model:
             pred_tot = np.concatenate((pred_tot, pred), axis=0)
 
         return pred_tot
+    
+    def get_layer_output(self, path, imgs):
+        """Returns the output after a layer"""
+        n_imgs = imgs.shape[0]
+        
+        pred_tot = np.empty(0)
+        saver = tf.train.Saver()
+        with tf.Session() as sess:
+            if path is not None:
+                saver.restore(sess, path)
+
+            for img in imgs:
+                lyr_out = sess.run(self.deconv4_c, feed_dict={self.tf_data : np.expand_dims(img,axis=0), self.is_training : False})
+                lyr_out = lyr_out.flatten()
+
+                pred_tot = np.concatenate((pred_tot,lyr_out.flatten()),axis=0)
+        
+        return np.reshape(pred_tot,(imgs.shape[0], imgs.shape[1], imgs.shape[2],-1))
+    
+    def build_fine_tune(self, seed=0):
+        """Retrain last layers of model"""
+        
+        tf.reset_default_graph()
+        tf.set_random_seed(seed)
+
+        # Place holders
+        self.learning_rate = tf.placeholder(tf.float32)
+        self.is_training = tf.placeholder(tf.bool)
+        #self.tf_data = tf.placeholder(tf.float32,[None, None, None, 3])
+        self.cnn_output = tf.placeholder(tf.float32,[None, None, None, 128])
+
+        self.tf_labels = tf.placeholder(tf.int32,[None,2])
+        fine_regularizer = tf.contrib.layers.l2_regularizer(scale=self.reg)
+
+        
+        self.fine_conv9_1 = self.bn_conv_relu(self.cnn_output, self.kernel_size, 1.5*self.n_filters, self.is_training, fine_regularizer)
+        
+        self.fine_conv9_2 = self.bn_conv_relu(self.fine_conv9_1, self.kernel_size, self.n_filters, self.is_training, fine_regularizer)
+                
+        self.fine_score_layer = tf.layers.conv2d(self.fine_conv9_2, filters=2, kernel_size=1,kernel_regularizer=fine_regularizer)
+        
+        fine_logits = tf.reshape(self.fine_score_layer, (-1,2))
+        #y = tf.nn.softmax(logits)
+        
+        #y_label = tf.multiply(tf.cast(self.tf_labels, tf.float32), self.tf_pen_road)
+        #self.cross_entropy = tf.reduce_mean(-tf.reduce_sum(tf.multiply(y_label, tf.log(y)), 1))
+
+        self.fine_cross_entropy = tf.losses.softmax_cross_entropy(onehot_labels=self.tf_labels, logits=fine_logits)
+        self.fine_reg_variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+        self.fine_reg_term = tf.contrib.layers.apply_regularization(fine_regularizer, self.fine_reg_variables)
+        self.fine_loss = self.fine_reg_term + self.fine_cross_entropy
+
+        fine_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(fine_update_ops):
+            self.fine_train_step = tf.train.AdamOptimizer(self.learning_rate).minimize(self.fine_loss)
+        self.fine_preds = tf.argmax(fine_logits,axis=1,output_type=tf.int32)
+        
+    def fine_tune(self, train_imgs, train_gt, n_epoch = 4, batch_size = 5, learning_rate_val = 1e-3, nmax=10,display_epoch=1, real_imgs=None):
+        """Fine tune model"""
+        
+        loss_tr_time = np.empty(0)
+        f1_tr_time = np.empty(0)
+        f1_tr_time_kag = np.empty(0)
+        loss_ts_time = np.empty(0)
+        f1_ts_time = np.empty(0)
+        f1_ts_time_kag = np.empty(0)
+        
+        init = tf.global_variables_initializer()
+        saver = tf.train.Saver()
+
+
+        with tf.Session() as sess:
+            sess.run(init)
+        
+            for epoch in range(n_epoch):
+                start_epoch = time.time()
+                # Train over train set using multiple batches
+                print('\nStart train with data shape: {}'.format(train_imgs.shape))
+                indices = np.random.permutation(train_gt.shape[0])
+                for batch_iter in range(int(np.ceil(train_gt.shape[0]/batch_size))):
+
+                    batch_idx = indices[batch_iter*batch_size:min((batch_iter+1)*batch_size, indices.shape[0])]
+                    batch_x = train_imgs[batch_idx]
+                    #r = np.reshape(train_gt[batch_idx], [-1])
+                    batch_y = self.one_hot_convert(np.reshape(train_gt[batch_idx], [-1]), 2)
+
+                    _, batch_loss, train_cross_entropy, train_reg_term = sess.run(
+                        [self.fine_train_step, self.fine_loss, self.fine_cross_entropy, self.fine_reg_term], # Returns
+                        feed_dict={self.cnn_output : batch_x, self.tf_labels : batch_y, # Feed variables
+                                   self.learning_rate : learning_rate_val, #})
+                                   self.is_training : True})
+
+
+                # Test prediction to select worst predictions
+                preds, loss_train, f1_train, f1_train_kag, f1s_all = self.fine_predict_model_cgt(sess, train_imgs, train_gt, nmax=nmax)
+
+                # Save losses and f1 for training sets
+                loss_tr_time = np.concatenate((loss_tr_time, [loss_train]), axis=0)
+                f1_tr_time = np.concatenate((f1_tr_time, [f1_train]), axis=0)
+                f1_tr_time_kag = np.concatenate((f1_tr_time_kag, [f1_train_kag]), axis=0)
+
+                # Feed back trainset
+                print("Recap epoch {} is {:.4f}s".format(epoch , time.time() - start_epoch))
+                print("\t last minibatch, loss : ", batch_loss, "cross entropy : ", train_cross_entropy, 
+                          "reg term : ", train_reg_term)
+                print("\t Train set loss : ", loss_train, ", f1 : ", f1_train)
+
+                if epoch % display_epoch == 0:
+                    if real_imgs is not None:
+                        preds_imgs = np.reshape(preds, train_gt.shape)
+                        plt.figure(figsize=(16,5))
+                        plt.subplot(1,3,1); 
+                        plt.imshow(real_imgs[0]); plt.axis('off'); plt.imshow(preds_imgs[0], alpha=0.4); plt.title('img0')
+                        plt.subplot(1,3,2); 
+                        plt.imshow(real_imgs[1]); plt.axis('off'); plt.imshow(preds_imgs[1], alpha=0.4); plt.title('img1')
+                        plt.subplot(1,3,3); 
+                        plt.imshow(real_imgs[2]); plt.axis('off'); plt.imshow(preds_imgs[2], alpha=0.4); plt.title('img2')
+                        plt.show()
+                #    if val_imgs is not None or val_imgs.ndim >= 2:
+
+                #        loss_val, f1_val, f1_val_kag, _ = self.predict_model_cgt(sess, val_imgs, val_gt, nmax=nmax)
+                #        loss_ts_time = np.concatenate((loss_ts_time, [loss_val]), axis=0)
+                #        f1_ts_time = np.concatenate((f1_ts_time, [f1_val]), axis=0)
+                #        f1_ts_time_kag = np.concatenate((f1_ts_time_kag, [f1_val_kag]), axis=0)
+
+                #        print("\t Validation set loss : ", loss_val, ", f1 : ", f1_val)
             
+            #str_date = datetime.datetime.now().strftime("%Y_%m_%d_%Hh%M")
+            self.save_path_model =  os.path.join(self.path_models, 'fine_tuned_model.ckpt')
+            saver.save(sess, self.save_path_model)
+            print("Model saved in file: %s" % self.save_path_model)
+        
         
     def apply_model(self, img, path, nmax=5):
         """ Predict images without evaluating F1-score """
@@ -519,6 +687,30 @@ class Model:
             pred = self.predict_model(sess, img, nmax=nmax)
 
         return pred
+    
+    def apply_model_cgt(self, img, gt, path, nmax=5):
+        """ Predict images without evaluating F1-score """
+        
+        init = tf.global_variables_initializer()
+        saver = tf.train.Saver()
+        
+        with tf.Session() as sess:
+            saver.restore(sess, path)
+            loss, f1_tot, f1_kaggle, f1s = self.predict_model_cgt(sess, img, gt, nmax)
+
+        return loss, f1_tot, f1_kaggle, f1s
+    
+    def fine_apply_model_cgt(self, img, gt, path, nmax=5):
+        """ Predict images without evaluating F1-score """
+        
+        init = tf.global_variables_initializer()
+        saver = tf.train.Saver()
+        
+        with tf.Session() as sess:
+            saver.restore(sess, path)
+            preds, loss, f1_tot, f1_kaggle, f1s = self.fine_predict_model_cgt(sess, img, gt, nmax)
+
+        return preds, loss, f1_tot, f1_kaggle, f1s
     
     def get_model_layers(self, img, path):
         """ Return a few selected layers for evaluation """
@@ -536,7 +728,7 @@ class Model:
         return layers, layers_labels
 
     def predict_f1(self, gt, pred):
-        """ Predict F1-score Pixel-wise """"
+        """ Predict F1-score Pixel-wise """
         return f1_score(np.reshape(gt, -1), np.reshape(pred, -1)) 
     
     def predict_f1_kaggle(self, gt, pred, shape_pred=400):
